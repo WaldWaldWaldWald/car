@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+<meta name="theme-color" content="#FF1F8F" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="format-detection" content="telephone=no" />
+<title>Аренда авто</title>
+<style>
+  :root {
+    --safe-top: calc(env(safe-area-inset-top, 0px) + 16px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: #fff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Arial, sans-serif;
+    color: #0A0B0F;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  #app {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+  *::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+  h1, h2, h3, h4, h5, h6 { color: #0A0B0F; }
+  button { font-family: inherit; }
+  #fb { padding: 24px; text-align: center; color: #8A8A95; font-size: 13px; }
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+</head>
+<body>
+<div id="app"><div id="fb">Загружаю прототип…</div></div>
+<script>
+(function(){
+function boot(){
+  if (typeof React==='undefined' || typeof ReactDOM==='undefined') { document.getElementById('fb').textContent='Не удалось загрузить React'; return; }
+  try {
+  const {useState, useEffect, useMemo, useRef} = React;
+  const h = React.createElement, F = React.Fragment;
+  const tap = (n=8) => { try { navigator.vibrate && navigator.vibrate(n); } catch(e){} };
+  const ST = "var(--safe-top)";
+  const stPlus = (n) => `calc(${ST} + ${n}px)`;
+  const sbPlus = (n) => `max(${n}px, calc(env(safe-area-inset-bottom, 0px) + ${n}px))`;
+
+  const T = {
+    primary:"#FF1F8F", primaryText:"#fff", primaryDim:"rgba(255,31,143,0.10)",
+    bg:"#fff", bgElev:"#fff", surface:"#F4F5F7",
+    glass:"rgba(255,255,255,0.78)", text:"#0A0B0F", textMuted:"#6B7280", textSubtle:"#9CA3AF",
+    border:"#E5E7EB", borderStrong:"#CBD5E1", success:"#10B981", successDim:"rgba(16,185,129,0.12)",
+    warning:"#F59E0B", warningDim:"rgba(245,158,11,0.12)",
+    info:"#1B6AF0", infoDim:"rgba(27,106,240,0.10)",
+  };
+
+  const RSD_PER_EUR = 117;
+  const SURCHARGE = { offHours:{eur:9,rsd:1000} };
+  const SERVICE_FEE_EUR = 2;
+  const fmt = (eur, cur) => cur === "RSD" ? Math.round(eur * RSD_PER_EUR).toLocaleString("ru-RU") + " дин" : eur + " €";
+  const fmtSurcharge = (key, cur) => { const s = SURCHARGE[key]; return cur === "RSD" ? "+" + s.rsd.toLocaleString("ru-RU") + " дин" : "+" + s.eur + " €"; };
+  const isOffHours = (time) => { const [hh,mm] = time.split(":").map(Number); const t = hh*60+mm; return t < 9*60 || t >= 18*60; };
+  function shade(hex, amt) { const n = parseInt(hex.replace("#",""),16); let r=(n>>16)+amt,g=(n>>8&255)+amt,b=(n&255)+amt; r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b)); return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }
+  function carImg(color) { const c2 = shade(color,-25); return "data:image/svg+xml;utf8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 110"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><ellipse cx="120" cy="98" rx="105" ry="6" fill="rgba(20,22,30,0.08)"/><path d="M30 78 Q35 50 70 45 L110 35 Q140 28 170 38 L195 50 Q215 55 220 75 L220 86 Q220 92 213 92 L196 92 A14 14 0 0 0 168 92 L86 92 A14 14 0 0 0 58 92 L37 92 Q30 92 30 86 Z" fill="url(#g)"/><path d="M82 47 L106 41 L106 60 L78 60 Q78 50 82 47 Z" fill="#E8F0FF" opacity=".9"/><path d="M112 40 L160 42 Q170 48 174 60 L112 60 Z" fill="#E8F0FF" opacity=".9"/><circle cx="72" cy="92" r="13" fill="#1a1a1a"/><circle cx="72" cy="92" r="6" fill="#555"/><circle cx="182" cy="92" r="13" fill="#1a1a1a"/><circle cx="182" cy="92" r="6" fill="#555"/></svg>`); }
+
+  const CARS = [
+    { id:"skoda-kamiq", model:"Skoda Kamiq", category:"SUV", transmission:"АКП", fuel:"Бензин", seats:5, pricePerDay:35, color:"#1B6AF0" },
+    { id:"vw-polo", model:"Volkswagen Polo", category:"Hatch", transmission:"МКП", fuel:"Бензин", seats:5, pricePerDay:25, color:"#2B2F36" },
+    { id:"hyundai-tucson", model:"Hyundai Tucson", category:"SUV", transmission:"АКП", fuel:"Дизель", seats:5, pricePerDay:55, color:"#7B8290" },
+    { id:"toyota-corolla", model:"Toyota Corolla", category:"Sedan", transmission:"АКП", fuel:"Гибрид", seats:5, pricePerDay:32, color:"#0E7C66" },
+    { id:"tesla-3", model:"Tesla Model 3", category:"Sedan", transmission:"АКП", fuel:"Электро", seats:5, pricePerDay:65, color:"#0A0B0F" },
+  ];
+  const CATEGORIES = [["all","Все"],["Hatch","Hatch"],["Sedan","Sedan"],["SUV","SUV"]];
+
+  const LOCATIONS = [
+    { id:"office-bg", code:null, name:"Офис Белград", subtitle:"Bul. V. Vilsona 8v", type:"office", priceEur:0 },
+    { id:"airport-bg", code:"BEG", name:"Аэропорт Белград", subtitle:"Терминал 2", type:"airport", priceEur:12 },
+    { id:"delivery", code:null, type:"delivery", priceEur:24 },
+  ];
+
+  const INSURANCES = [
+    { id:"basic", name:"Базовая", short:"Минимум — без доплат", pricePerDay:0, isIncluded:true, liability:"900 €", deposit:"900 €",
+      features:[{ok:true,text:"От угона"},{ok:true,text:"Отмена брони"},{ok:false,text:"Шины и стёкла"},{ok:false,text:"Повреждения салона"}] },
+    { id:"reduced", name:"Сниженный депозит", short:"Меньше риск, шины и стёкла", pricePerDay:8, recommended:true, liability:"300 €", deposit:"300 €",
+      features:[{ok:true,text:"Всё из базовой"},{ok:true,text:"Шины и стёкла"},{ok:true,text:"Помощь на дороге"},{ok:false,text:"Повреждения салона"}] },
+    { id:"full", name:"Без депозита", short:"Полное покрытие", pricePerDay:14, liability:"0 €", deposit:"0 €",
+      features:[{ok:true,text:"Всё из «Сниженного»"},{ok:true,text:"Повреждения салона"},{ok:true,text:"Замена авто при поломке"}] },
+  ];
+
+  const EXTRAS = [
+    { id:"second-driver", name:"Второй водитель", group:"Сервис", price:10, perDay:false, max:1 },
+    { id:"abroad", name:"Выезд за границу", group:"Сервис", price:25, perDay:false, max:1 },
+    { id:"road-help", name:"Помощь на дороге", group:"Сервис", price:6, perDay:true, max:1 },
+    { id:"child-seat-1", name:"Кресло до 20 кг (1–3 года)", group:"Семья", price:10, perDay:true, max:3 },
+    { id:"child-seat-2", name:"Кресло 9–36 кг (3–6 лет)", group:"Семья", price:10, perDay:true, max:3 },
+    { id:"booster", name:"Бустер", group:"Семья", price:5, perDay:true, max:3 },
+    { id:"wifi", name:"4G Wi-Fi роутер", group:"Комфорт", price:5, perDay:true, max:1 },
+    { id:"unlimited", name:"Безлимит на пробег", group:"Комфорт", price:5, perDay:true, max:1 },
+    { id:"roof-box", name:"Бокс на крышу", group:"Комфорт", price:20, perDay:true, max:1 },
+    { id:"pet-hammock", name:"Гамак для животных", group:"Комфорт", price:5, perDay:true, max:1 },
+  ];
+
+  function locDisplay(loc, context) {
+    if (!loc) return { name:"Выбрать", subtitle:"" };
+    if (loc.type !== "delivery") return { name:loc.name, subtitle:loc.subtitle };
+    if (context === "pickup") return { name:"Привезём вам", subtitle:"Доставим по адресу" };
+    return { name:"Заберём сами", subtitle:"Приедем по адресу" };
+  }
+  function locIconStyle(loc) {
+    if (loc.type === "airport") return { bg: T.text, color: "#fff" };
+    if (loc.type === "office")  return { bg: T.info, color: "#fff" };
+    return { bg: T.primary, color: "#fff" };
+  }
+  function pricePillProps(loc, active, cur) {
+    const isFree = !loc?.priceEur;
+    if (isFree) return { text: "0 €", bg: T.successDim, color: T.success };
+    return { text: "+" + fmt(loc.priceEur, cur), bg: active ? T.primary : T.borderStrong, color: active ? "#fff" : T.text };
+  }
+
+  function todayPlus(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+  function fmtDay(iso){ if(!iso) return "—"; const [y,m,d]=iso.split("-"); const M=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]; const W=["вс","пн","вт","ср","чт","пт","сб"]; const dt=new Date(iso); return `${parseInt(d,10)} ${M[parseInt(m,10)-1]}, ${W[dt.getDay()]}`; }
+  function fmtDayShort(iso){ if(!iso) return "—"; const [y,m,d]=iso.split("-"); const M=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]; return `${parseInt(d,10)} ${M[parseInt(m,10)-1]}`; }
+  function days(a,b){ if(!a||!b) return 0; const ms=new Date(b)-new Date(a); if(ms<=0) return 0; return Math.max(1,Math.ceil(ms/86400000)); }
+
+  function calcSurchargesEur(state) {
+    let eur = 0;
+    const p = LOCATIONS.find(l=>l.id===state.pickupLoc);
+    const r = LOCATIONS.find(l=>l.id===state.returnLoc);
+    if (p) eur += p.priceEur || 0;
+    if (r) eur += r.priceEur || 0;
+    if (isOffHours(state.pickupTime)) eur += SURCHARGE.offHours.eur;
+    if (isOffHours(state.returnTime)) eur += SURCHARGE.offHours.eur;
+    return eur;
+  }
+  function calcExtrasEur(extras, days) {
+    let eur = 0;
+    Object.entries(extras||{}).forEach(([id, count])=>{
+      if (!count) return;
+      const ex = EXTRAS.find(e=>e.id===id);
+      if (!ex) return;
+      eur += (ex.perDay ? ex.price * Math.max(days,1) : ex.price) * count;
+    });
+    return eur;
+  }
+  function countExtras(extras) { return Object.values(extras||{}).reduce((a,b)=>a+b,0); }
+
+  const SV = (d, w=22, sw=1.7) => h("svg", {width:w, height:w, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:sw, strokeLinecap:"round", strokeLinejoin:"round"}, h("path",{d}));
+  const SVC = (children, w=22, sw=1.7) => h("svg", {width:w, height:w, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:sw, strokeLinecap:"round", strokeLinejoin:"round"}, children);
+  const I = {
+    back:()=>SV("M15 18l-6-6 6-6"),
+    close:()=>SV("M6 6l12 12M18 6L6 18"),
+    plane:()=>SV("M21 12l-9-9-2 2 5 6-7 1-3-3-2 2 5 5 5 5 2-2-3-3 1-7 6 5 2-2z"),
+    home:()=>SV("M3 12 L12 3 L21 12 V20 H3 Z M10 20 V14 H14 V20"),
+    truck:()=>SVC([h("path",{key:1,d:"M3 7h11v10H3zM14 11h4l3 3v3h-7"}),h("circle",{key:2,cx:7.5,cy:18.5,r:2}),h("circle",{key:3,cx:17.5,cy:18.5,r:2})]),
+    cal:()=>SVC([h("rect",{key:1,x:3,y:5,width:18,height:16,rx:3}),h("path",{key:2,d:"M3 10h18M8 3v4M16 3v4"})]),
+    chev:()=>SV("M9 6l6 6-6 6"),
+    check:()=>SV("M5 12l4 4 10-10",18,2),
+    cross:()=>SV("M6 6l12 12M18 6L6 18",14,1.8),
+    person:()=>SVC([h("circle",{key:1,cx:12,cy:7,r:3.5}),h("path",{key:2,d:"M4 21c0-4 4-7 8-7s8 3 8 7"})],16,1.6),
+    fuel:()=>SVC([h("rect",{key:1,x:4,y:4,width:9,height:16,rx:1.5}),h("path",{key:2,d:"M4 9h9M13 8l4 3v6a2 2 0 11-4 0"})],16,1.6),
+    gear:()=>SVC([h("circle",{key:1,cx:12,cy:5,r:1.6}),h("path",{key:2,d:"M12 6.6v8M6 14.6h12M6 14.6v4M12 14.6v4M18 14.6v4"})],16,1.6),
+    shield:()=>SVC([h("path",{key:1,d:"M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"}),h("path",{key:2,d:"M9 12l2 2 4-4"})]),
+    refund:()=>SVC([h("path",{key:1,d:"M3 12a9 9 0 109-9"}),h("path",{key:2,d:"M3 4v5h5"})]),
+    chat:()=>SV("M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"),
+    clock:()=>SVC([h("circle",{key:1,cx:12,cy:12,r:9}),h("path",{key:2,d:"M12 7v5l3 2"})]),
+    info:()=>SVC([h("circle",{key:1,cx:12,cy:12,r:9}),h("path",{key:2,d:"M12 11v5M12 7.5h0"})]),
+    plus:()=>SV("M12 5v14M5 12h14",18,2),
+    minus:()=>SV("M5 12h14",18,2),
+    doc:()=>SVC([h("path",{key:1,d:"M14 3v5h5M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"}),h("path",{key:2,d:"M9 13h6M9 17h4"})]),
+    license:()=>SVC([h("rect",{key:1,x:3,y:5,width:18,height:14,rx:2}),h("circle",{key:2,cx:9,cy:11,r:2}),h("path",{key:3,d:"M14 10h4M14 13h4M5 17h14"})]),
+    bolt:()=>SV("M13 2L4 14h7l-1 8 9-12h-7l1-8z"),
+    edit:()=>SVC([h("path",{key:1,d:"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"}),h("path",{key:2,d:"M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z"})]),
+    spark:()=>SVC([h("path",{key:1,d:"M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"}),h("circle",{key:2,cx:12,cy:12,r:3})],16,1.6),
+    user:()=>SVC([h("circle",{key:1,cx:12,cy:8,r:4}),h("path",{key:2,d:"M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"})]),
+    building:()=>SVC([h("rect",{key:1,x:5,y:3,width:14,height:18,rx:1}),h("path",{key:2,d:"M9 7h0M15 7h0M9 11h0M15 11h0M9 15h0M15 15h0M10 21v-3h4v3"})]),
+    mail:()=>SVC([h("rect",{key:1,x:3,y:5,width:18,height:14,rx:2}),h("path",{key:2,d:"M3 7l9 7 9-7"})]),
+  };
+
+  function Pressable({onClick, style, children, disabled}) {
+    return h("button", {
+      onClick: () => { if(!disabled){ tap(8); onClick && onClick(); } },
+      disabled,
+      onMouseDown:(e)=>!disabled&&(e.currentTarget.style.transform="scale(0.97)"),
+      onMouseUp:(e)=>e.currentTarget.style.transform="",
+      onMouseLeave:(e)=>e.currentTarget.style.transform="",
+      onTouchStart:(e)=>!disabled&&(e.currentTarget.style.transform="scale(0.97)"),
+      onTouchEnd:(e)=>e.currentTarget.style.transform="",
+      style: Object.assign({background:"transparent", border:"none", padding:0, margin:0, font:"inherit", color:"inherit",textAlign:"left", cursor:disabled?"not-allowed":"pointer",transition:"transform 0.15s cubic-bezier(0.34, 1.3, 0.64, 1)", WebkitTapHighlightColor:"transparent"}, style||{})
+    }, children);
+  }
+
+  function PrimaryBtn({children, onClick, disabled, full=true, style}) {
+    return h(Pressable, {onClick, disabled, style:Object.assign({width:full?"100%":"auto", minHeight:52, padding:"0 20px",background: disabled?T.borderStrong:T.primary, color:T.primaryText,borderRadius:14, fontSize:16, fontWeight:600,display:"flex", alignItems:"center", justifyContent:"center", gap:8, letterSpacing:0.2}, style||{})}, children);
+  }
+
+  function GlassHeader({title, onBack, transparent, right}) {
+    return h("div",{style:{position:"sticky",top:0,zIndex:30,background:transparent?"transparent":T.glass,backdropFilter:"saturate(180%) blur(18px)",WebkitBackdropFilter:"saturate(180%) blur(18px)",borderBottom:transparent?"none":"0.5px solid "+T.border,paddingTop:ST}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 12px",minHeight:48}},
+        onBack && h(Pressable,{onClick:onBack,style:{width:40,height:40,borderRadius:999,background:T.surface,color:T.text,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.back)),
+        h("div",{style:{flex:1,fontSize:17,fontWeight:600,color:T.text,textAlign:onBack?"center":"left",paddingRight:onBack&&!right?40:0}}, title),
+        right
+      )
+    );
+  }
+
+  function CurrencyToggle({cur, setCur, onLight}) {
+    return h("div",{style:{position:"absolute", top: stPlus(8), right:16, zIndex:5,display:"flex", padding:3, borderRadius:999,background: onLight?"rgba(255,255,255,0.20)":T.surface,backdropFilter:"blur(10px)"}},
+      [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k); tap(10);},style:{background: cur===k ? "#fff" : "transparent",color: cur===k ? T.primary : (onLight?"#fff":T.text),padding:"6px 12px", borderRadius:999,fontWeight:600, fontSize:12}}, l))
+    );
+  }
+
+  function CurrencyTogglePill({cur,setCur}) {
+    return h("div",{style:{display:"flex",padding:3,borderRadius:999,background:T.surface,marginRight:4}},
+      [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k); tap(10);},style:{background: cur===k ? T.text : "transparent",color: cur===k ? T.bg : T.textMuted,padding:"5px 10px", borderRadius:999,fontWeight:600, fontSize:12}}, l))
+    );
+  }
+
+  function StepBar({step, onJump}) {
+    const steps = [{k:"ins",l:"Защита"},{k:"ext",l:"Услуги"},{k:"sum",l:"Бронирование"}];
+    return h("div",{style:{display:"flex",gap:6,padding:"8px 16px 12px"}},
+      steps.map((s,i)=>{
+        const active = i === step;
+        const done = i < step;
+        return h(Pressable,{key:s.k,disabled:i>step,onClick:()=>onJump&&onJump(i),style:{flex:1,opacity:i>step?0.4:1}},
+          h("div",{style:{height:3,background:done||active?T.primary:T.border,borderRadius:2,marginBottom:6}}),
+          h("div",{style:{fontSize:10,color:active?T.primary:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, s.l)
+        );
+      })
+    );
+  }
+
+  function BottomSheet({open, onClose, title, children, height}) {
+    useEffect(()=>{ if(open) document.body.style.overflow="hidden"; return ()=>{document.body.style.overflow="";}; },[open]);
+    return h(F, null,
+      h("div",{onClick:onClose,style:{position:"fixed",inset:0,zIndex:80,background:"rgba(0,0,0,0.45)",opacity:open?1:0,pointerEvents:open?"auto":"none",transition:"opacity 0.22s"}}),
+      h("div",{role:"dialog",style:{position:"fixed",left:0,right:0,bottom:0,zIndex:81,background:T.bgElev,borderRadius:"28px 28px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,0.18)",maxHeight:"94%",height:height||"auto",display:"flex",flexDirection:"column",transform:open?"translateY(0)":"translateY(105%)",transition:"transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)",overflow:"hidden",color:T.text,paddingBottom:"env(safe-area-inset-bottom, 0px)"}},
+        h("div",{style:{display:"flex",justifyContent:"center",padding:"8px 0 0"}}, h("div",{style:{width:36,height:4,borderRadius:2,background:T.borderStrong}})),
+        title && h("div",{style:{padding:"12px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+          h("h2",{style:{fontSize:18,fontWeight:700,margin:0,color:T.text}}, title),
+          h(Pressable,{onClick:onClose,style:{width:36,height:36,borderRadius:999,background:T.surface,color:T.text,display:"flex",alignItems:"center",justifyContent:"center"}}, h(I.close))
+        ),
+        h("div",{style:{flex:1,overflow:"auto",padding:"8px 16px 16px"}}, children)
+      )
+    );
+  }
+
+  function Calendar({start, end, onDay, months=2}) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const monthsArr = []; for(let i=0;i<months;i++) monthsArr.push(new Date(today.getFullYear(), today.getMonth()+i, 1));
+    return h("div",{style:{display:"grid",gap:18}}, monthsArr.map((mDate,mi)=>{
+      const y=mDate.getFullYear(), m=mDate.getMonth();
+      const first=new Date(y,m,1), last=new Date(y,m+1,0);
+      const startDow=(first.getDay()+6)%7;
+      const cells=[]; for(let i=0;i<startDow;i++) cells.push(null);
+      for(let d=1;d<=last.getDate();d++) cells.push(`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
+      const monthName = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"][m];
+      return h("div",{key:mi},
+        h("div",{style:{fontSize:14,fontWeight:700,marginBottom:8,color:T.text}}, monthName+" "+y),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:4,fontSize:11,color:T.textMuted,marginBottom:4}}, ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(d=>h("div",{key:d,style:{textAlign:"center",padding:"4px 0"}},d))),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:2}}, cells.map((iso,i)=>{
+          if(!iso) return h("div",{key:i});
+          const date=new Date(iso); date.setHours(0,0,0,0);
+          const past=date<today;
+          const inR = start && end && iso>=start && iso<=end;
+          const isS = iso===start, isE = iso===end;
+          return h(Pressable,{key:iso, disabled:past, onClick:()=>!past&&onDay(iso), style:{aspectRatio:"1 / 1", display:"flex", alignItems:"center", justifyContent:"center",fontSize:14, fontWeight:isS||isE?700:500,color: past?T.textSubtle : (isS||isE)?T.primaryText : inR?T.primary : T.text,background: (isS||isE)?T.primary : inR?T.primaryDim : "transparent",borderRadius: 999}}, date.getDate());
+        }))
+      );
+    }));
+  }
+
+  function DateSheet({open, onClose, value, onConfirm}) {
+    const [s, setS] = useState(value.start);
+    const [e, setE] = useState(value.end);
+    useEffect(()=>{ if(open){ setS(value.start); setE(value.end); } },[open]);
+    const onDay = (iso)=>{ if(!s || (s && e)) { setS(iso); setE(""); tap(8); return; } if(iso<s) { setS(iso); setE(""); tap(8); return; } setE(iso); tap(10); };
+    const chip = (k)=>{ const t=new Date(); let x,y; if(k==="today"){ x=t; y=new Date(t); y.setDate(t.getDate()+1); } if(k==="weekend"){ const sat=(6-t.getDay()+7)%7||7; x=new Date(t); x.setDate(t.getDate()+sat); y=new Date(x); y.setDate(x.getDate()+2); } if(k==="week"){ x=new Date(t); x.setDate(t.getDate()+1); y=new Date(x); y.setDate(x.getDate()+7); } setS(x.toISOString().slice(0,10)); setE(y.toISOString().slice(0,10)); tap(10); };
+    const d = days(s,e);
+    return h(BottomSheet,{open,onClose,title:"Даты аренды",height:"86%"},
+      h("div",{style:{display:"flex",gap:8,overflowX:"auto",padding:"4px 0 12px"}}, [["today","Сегодня → завтра"],["weekend","Выходные"],["week","Неделя"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>chip(k),style:{padding:"8px 14px",borderRadius:999,background:T.surface,color:T.text,fontSize:13,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}, l))),
+      h(Calendar,{start:s,end:e,onDay,months:3}),
+      h("div",{style:{position:"sticky",bottom:0,marginTop:16,paddingTop:12,background:`linear-gradient(180deg, transparent 0%, ${T.bgElev} 30%)`}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+          h("div",null,
+            h("div",{style:{fontSize:12,color:T.textMuted}}, s&&e?`${fmtDayShort(s)} — ${fmtDayShort(e)}`:"Выберите даты"),
+            h("div",{style:{fontSize:16,fontWeight:700,color:T.text}}, d?d+" дн.":"—")
+          )
+        ),
+        h(PrimaryBtn,{disabled: !s||!e, onClick:()=>onConfirm({start:s,end:e})}, "Применить")
+      )
+    );
+  }
+
+  function LocSheet({open, onClose, valueLoc, valueTime, onConfirm, title, timeLabel, cur, context}) {
+    const [loc, setLoc] = useState(valueLoc);
+    const [time, setTime] = useState(valueTime);
+    useEffect(()=>{ if(open){ setLoc(valueLoc); setTime(valueTime); } },[open]);
+    const off = isOffHours(time);
+    const hours = []; for (let h2=6; h2<=22; h2++) for (let m=0; m<60; m+=30) hours.push(`${String(h2).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+    return h(BottomSheet,{open,onClose,title,height:"auto"},
+      h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.5,fontWeight:600,padding:"4px 4px 8px"}}, "Место"),
+      h("div",{style:{display:"grid",gap:8}},
+        LOCATIONS.map(l=>h(LocCard,{key:l.id,loc:l,active:loc===l.id,onClick:()=>{setLoc(l.id); tap(8);},cur,context}))
+      ),
+      h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.5,fontWeight:600,padding:"16px 4px 8px"}}, timeLabel||"Время"),
+      h("div",{style:{display:"flex",alignItems:"center",gap:10}},
+        h("span",{style:{width:36,height:36,borderRadius:14,background:off?T.warningDim:T.surface,color:off?T.warning:T.text,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.clock)),
+        h("select",{value:time, onChange:(e)=>{setTime(e.target.value); tap(6);}, style:{flex:1, minHeight:48, padding:"0 14px", background:T.surface,border:"1.5px solid transparent", borderRadius:14,fontSize:16, color:T.text, outline:"none", fontFamily:"inherit",appearance:"none",backgroundImage:`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2.5' stroke-linecap='round'><polyline points='6 9 12 15 18 9'/></svg>")`,backgroundRepeat:"no-repeat", backgroundPosition:"right 12px center", paddingRight:36}}, hours.map(o=>h("option",{key:o,value:o}, o)))
+      ),
+      h("div",{style:{fontSize:11,color: off?T.warning:T.textMuted,marginTop:6,padding:"0 4px",fontWeight:off?600:400}},
+        off ? "⚠ Вне 09:00–18:00 · надбавка "+fmtSurcharge("offHours",cur) : "Бесплатно с 09:00 до 18:00"
+      ),
+      h("div",{style:{marginTop:18}},
+        h(PrimaryBtn,{onClick:()=>onConfirm({loc,time})}, "Применить")
+      )
+    );
+  }
+
+  function LocCard({loc, active, onClick, cur, context}) {
+    const Icon = loc.type==="airport" ? I.plane : loc.type==="office" ? I.home : I.truck;
+    const display = locDisplay(loc, context);
+    const ic = locIconStyle(loc);
+    const pill = pricePillProps(loc, active, cur);
+    return h(Pressable,{onClick,style:{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:active?T.primaryDim:T.surface,border:`1.5px solid ${active?T.primary:"transparent"}`,borderRadius:14,width:"100%"}},
+      h("span",{style:{width:36,height:36,borderRadius:12,background:ic.bg,color:ic.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:700,letterSpacing:0.4}}, loc.code || h(Icon)),
+      h("div",{style:{flex:1,minWidth:0}},
+        h("div",{style:{fontWeight:600,fontSize:14,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, display.name),
+        h("div",{style:{fontSize:12,color:T.textMuted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, display.subtitle)
+      ),
+      h("div",{style:{display:"flex",alignItems:"center",gap:6,flexShrink:0}},
+        h("span",{style:{padding:"3px 8px",borderRadius:999,background:pill.bg,color:pill.color,fontSize:11,fontWeight:700,whiteSpace:"nowrap",minWidth:46,textAlign:"center"}}, pill.text),
+        active && h("span",{style:{width:22,height:22,borderRadius:"50%",background:T.primary,color:T.primaryText,display:"flex",alignItems:"center",justifyContent:"center"}}, h(I.check))
+      )
+    );
+  }
+
+  function locIconFor(loc) { if (!loc) return h(I.cal); if (loc.type==="airport") return h(I.plane); if (loc.type==="delivery") return h(I.truck); return h(I.home); }
+
+  function Home({state, onSheet, onSearch, cur, setCur}) {
+    const pickup = LOCATIONS.find(l=>l.id===state.pickupLoc);
+    const ret = LOCATIONS.find(l=>l.id===state.returnLoc);
+    const d = days(state.pickupDate, state.returnDate);
+    const pickupOff = isOffHours(state.pickupTime);
+    const returnOff = isOffHours(state.returnTime);
+    const pd = locDisplay(pickup, "pickup");
+    const rd = locDisplay(ret, "return");
+    const pickupFee = (pickup?.priceEur||0) + (pickupOff?SURCHARGE.offHours.eur:0);
+    const returnFee = (ret?.priceEur||0) + (returnOff?SURCHARGE.offHours.eur:0);
+    return h("div",null,
+      h("div",{style:{position:"relative",background:`linear-gradient(160deg, ${T.primary} 0%, ${shade(T.primary,-25)} 100%)`,padding:`${stPlus(20)} 20px 100px`,color:"#fff"}},
+        h(CurrencyToggle,{cur,setCur,onLight:true}),
+        h("h1",{style:{fontSize:30,fontWeight:700,margin:"0 0 6px",lineHeight:1.1,letterSpacing:-0.5,color:"#fff"}}, "Куда поедем?"),
+        h("div",{style:{fontSize:14,opacity:0.85}}, "Авто за 60 секунд")
+      ),
+      h("div",{style:{margin:"-78px 16px 20px",padding:14,background:T.bgElev,borderRadius:28,boxShadow:"0 12px 32px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.04)",position:"relative",zIndex:2}},
+        h(SearchRow,{icon:locIconFor(pickup),label:"Получение",value:pd.name,sub:`${pd.subtitle} · ${state.pickupTime}${pickupFee>0?" · +"+fmt(pickupFee,cur):""}`,onClick:()=>onSheet("loc-pickup")}),
+        h("div",{style:{height:0.5,background:T.border,margin:"2px 0"}}),
+        h(SearchRow,{icon:h(I.cal),label:"Даты",value:state.pickupDate&&state.returnDate?`${fmtDayShort(state.pickupDate)} — ${fmtDayShort(state.returnDate)}`:"Выбрать даты",sub:d?d+" дн.":"",onClick:()=>onSheet("date")}),
+        h("div",{style:{height:0.5,background:T.border,margin:"2px 0"}}),
+        h(SearchRow,{icon:locIconFor(ret),label:"Возврат",value:rd.name,sub:`${rd.subtitle} · ${state.returnTime}${returnFee>0?" · +"+fmt(returnFee,cur):""}`,onClick:()=>onSheet("loc-return")}),
+        h("div",{style:{marginTop:12}},
+          h(PrimaryBtn,{onClick:onSearch,disabled:!state.pickupDate||!state.returnDate}, "Найти авто")
+        )
+      ),
+      h("div",{style:{padding:"12px 16px 24px",display:"grid",gap:10}},
+        h(Trust,{icon:h(I.shield),title:"Можно без депозита",sub:"Выберите уровень защиты"}),
+        h(Trust,{icon:h(I.refund),title:"Бесплатная отмена",sub:"За 48 часов до получения"}),
+        h(Trust,{icon:h(I.chat),title:"Поддержка 24/7",sub:"Чат и телефон"}),
+      )
+    );
+  }
+
+  function SearchRow({icon,label,value,sub,onClick}) {
+    return h(Pressable,{onClick,style:{display:"flex",alignItems:"center",gap:12,padding:"8px 6px",width:"100%",minHeight:56}},
+      h("span",{style:{width:36,height:36,borderRadius:14,background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
+      h("div",{style:{flex:1,minWidth:0}},
+        h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, label),
+        h("div",{style:{fontSize:15,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, value),
+        sub && h("div",{style:{fontSize:11,color:T.textSubtle,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, sub)
+      ),
+      h("span",{style:{color:T.textSubtle}}, h(I.chev))
+    );
+  }
+
+  function Trust({icon, title, sub}) {
+    return h("div",{style:{padding:"12px 14px",background:T.surface,borderRadius:18,display:"flex",alignItems:"center",gap:12}},
+      h("span",{style:{width:36,height:36,borderRadius:12,background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
+      h("div",null,
+        h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, title),
+        h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, sub)
+      )
+    );
+  }
+
+  function Catalog({state, onBack, onSelect, onEdit, cur, setCur}) {
+    const [cat, setCat] = useState("all");
+    const d = days(state.pickupDate, state.returnDate);
+    const sur = calcSurchargesEur(state);
+    const list = CARS.filter(c=>cat==="all"||c.category===cat);
+    const pickup = LOCATIONS.find(l=>l.id===state.pickupLoc);
+    const pd = locDisplay(pickup, "pickup");
+    const summaryShort = pickup?.code || (pickup?.type==="delivery"?"Доставка":pd.name.split(" ")[0]);
+    return h("div",null,
+      h(GlassHeader,{title:"Доступные авто",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(Pressable,{onClick:onEdit,style:{display:"flex",alignItems:"center",gap:10,margin:"8px 16px 12px",padding:"10px 14px",background:T.surface,borderRadius:18,width:"calc(100% - 32px)"}},
+        h("span",{style:{color:T.primary}}, h(I.cal)),
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, `${summaryShort} · ${fmtDayShort(state.pickupDate)} — ${fmtDayShort(state.returnDate)}`),
+          h("div",{style:{fontSize:11,color:T.textMuted}}, `${d} дн.${sur>0?" · сборы +"+fmt(sur,cur):""}`)
+        ),
+        h("span",{style:{padding:"4px 9px",borderRadius:999,background:T.primaryDim,color:T.primary,fontSize:11,fontWeight:600}}, "Изменить")
+      ),
+      h("div",{style:{display:"flex",gap:6,padding:"0 12px",overflowX:"auto"}},
+        CATEGORIES.map(([k,l])=>{
+          const a = k===cat;
+          return h(Pressable,{key:k,onClick:()=>setCat(k),style:{padding:"8px 14px",borderRadius:999,background:a?T.text:T.surface,color:a?T.bg:T.text,fontSize:13,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}, l);
+        })
+      ),
+      h("div",{style:{padding:"14px 16px 0",fontSize:13,color:T.textMuted}}, `${list.length} авто`),
+      h("div",{style:{padding:"8px 16px 24px",display:"grid",gap:12}}, list.map(c=>h(CarCard,{key:c.id,car:c,d,sur,onClick:()=>onSelect(c),cur})))
+    );
+  }
+
+  function CarCard({car, d, sur, onClick, cur}) {
+    const totalEur = car.pricePerDay * d + sur;
+    return h(Pressable,{onClick,style:{background:T.bgElev,borderRadius:24,border:"0.5px solid "+T.border,padding:14,width:"100%",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
+      h("div",{style:{background:T.surface,borderRadius:18,padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"center",minHeight:120}},
+        h("img",{src:carImg(car.color),alt:car.model,style:{maxWidth:"94%",maxHeight:108}})
+      ),
+      h("div",{style:{marginTop:12,display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8}},
+        h("div",{style:{minWidth:0}},
+          h("div",{style:{fontSize:18,fontWeight:800,color:T.text}}, car.model),
+          h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, car.category)
+        ),
+        h("div",{style:{textAlign:"right"}},
+          h("div",{style:{fontSize:20,fontWeight:800,color:T.primary}}, fmt(car.pricePerDay,cur)),
+          h("div",{style:{fontSize:11,color:T.textMuted}}, d?`${fmt(totalEur,cur)} всего`:"в день")
+        )
+      ),
+      h("div",{style:{marginTop:10,display:"flex",gap:14,fontSize:12,color:T.textMuted}},
+        h("span",{style:{display:"flex",alignItems:"center",gap:5}}, h(I.gear), car.transmission),
+        h("span",{style:{display:"flex",alignItems:"center",gap:5}}, h(I.fuel), car.fuel),
+        h("span",{style:{display:"flex",alignItems:"center",gap:5}}, h(I.person), car.seats)
+      )
+    );
+  }
+
+  function CarDetail({car, state, onBack, onConfirm, cur, setCur}) {
+    const d = days(state.pickupDate, state.returnDate);
+    const sur = calcSurchargesEur(state);
+    const total = car.pricePerDay * d + sur;
+    return h("div",null,
+      h(GlassHeader,{title:"",transparent:true,onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h("div",{style:{margin:`calc(-1 * (${ST} + 54px)) 0 0`,paddingTop:`calc(${ST} + 54px)`,background:T.surface,paddingBottom:14}},
+        h("div",{style:{height:200,display:"flex",alignItems:"center",justifyContent:"center"}},
+          h("img",{src:carImg(car.color),alt:car.model,style:{maxWidth:"82%",maxHeight:"82%"}})
+        )
+      ),
+      h("div",{style:{padding:"16px 16px 0"}},
+        h("h1",{style:{fontSize:28,fontWeight:800,margin:"0",color:T.text}}, car.model),
+        h("div",{style:{fontSize:13,color:T.textMuted,marginTop:4}}, car.category)
+      ),
+      h("div",{style:{margin:"16px",padding:"16px 0",display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:4,borderTop:"0.5px solid "+T.border,borderBottom:"0.5px solid "+T.border}},
+        [[h(I.gear),car.transmission,"коробка"],[h(I.fuel),car.fuel,"топливо"],[h(I.person),car.seats,"мест"]].map((s,i)=>
+          h("div",{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
+            h("span",{style:{color:T.textMuted}}, s[0]),
+            h("span",{style:{fontSize:14,fontWeight:700,color:T.text}}, s[1]),
+            h("span",{style:{fontSize:10,color:T.textMuted}}, s[2])
+          )
+        )
+      ),
+      h("div",{style:{padding:"0 16px"}},
+        h("h2",{style:{fontSize:16,fontWeight:700,margin:"4px 0 10px",color:T.text}}, "Что включено"),
+        [["Можно без депозита","Выберите уровень защиты на следующем шаге"],["Бесплатная отмена","За 48 часов до получения"],["Поддержка 24/7","Чат и телефон"]].map(([t,s2],i)=>
+          h("div",{key:i,style:{display:"flex",gap:12,padding:"10px 0",alignItems:"center"}},
+            h("span",{style:{width:32,height:32,borderRadius:12,background:T.successDim,color:T.success,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.check)),
+            h("div",null,
+              h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, t),
+              h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, s2)
+            )
+          )
+        )
+      ),
+      h("div",{style:{height:104}}),
+      h("div",{style:{position:"sticky",bottom:0,zIndex:10,background:T.glass,backdropFilter:"saturate(180%) blur(18px)",borderTop:"0.5px solid "+T.border,padding:"12px 16px",paddingBottom:sbPlus(12),display:"flex",alignItems:"center",gap:12}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:12,color:T.textMuted}}, `${d} дн. · базовая стоимость`),
+          h("div",{style:{fontSize:22,fontWeight:800,color:T.text}}, fmt(total,cur))
+        ),
+        h(PrimaryBtn,{onClick:onConfirm,full:false,style:{minWidth:170}}, "Выбрать авто")
+      )
+    );
+  }
+
+  function InsuranceStep({state, ins, setIns, onBack, onNext, cur, setCur, days:d}) {
+    return h("div",null,
+      h(GlassHeader,{title:"Защита",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(StepBar,{step:0}),
+      h("div",{style:{padding:"4px 16px 16px",fontSize:13,color:T.textMuted,lineHeight:1.45}}, "Какой риск вы готовы взять и какой депозит замораживается на карте."),
+      h("div",{style:{padding:"0 16px 24px",display:"grid",gap:12}},
+        INSURANCES.map(opt=>h(InsuranceCard,{key:opt.id,opt,active:opt.id===ins,onClick:()=>{setIns(opt.id); tap(8);},days:d,cur}))
+      ),
+      h("div",{style:{position:"sticky",bottom:0,zIndex:10,background:T.glass,backdropFilter:"saturate(180%) blur(18px)",borderTop:"0.5px solid "+T.border,padding:"12px 16px",paddingBottom:sbPlus(12),display:"flex",alignItems:"center",gap:12}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.4}}, "Защита"),
+          h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, (function(){
+            const o = INSURANCES.find(i=>i.id===ins);
+            return o.isIncluded ? "Включено" : "+"+fmt(o.pricePerDay*d,cur)+" ("+d+" дн.)";
+          })())
+        ),
+        h(PrimaryBtn,{onClick:onNext,full:false,style:{minWidth:140}}, "Далее")
+      )
+    );
+  }
+
+  function InsuranceCard({opt, active, onClick, days, cur}) {
+    return h(Pressable,{onClick,style:{position:"relative", padding:"16px 14px 14px", borderRadius:20,background: active ? T.primaryDim : T.bgElev,border: `2px solid ${active ? T.primary : T.border}`,width:"100%", textAlign:"left"}},
+      opt.recommended && h("span",{style:{position:"absolute", top:-10, right:14,padding:"3px 10px", borderRadius:999, fontSize:10, fontWeight:700,background:T.primary, color:T.primaryText, textTransform:"uppercase", letterSpacing:0.4}}, "Рекомендуем"),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+            h("div",{style:{fontSize:16,fontWeight:700,color:T.text}}, opt.name),
+            active && h("span",{style:{width:18,height:18,borderRadius:"50%",background:T.primary,color:T.primaryText,display:"flex",alignItems:"center",justifyContent:"center"}}, h(I.check))
+          ),
+          h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, opt.short)
+        ),
+        h("div",{style:{textAlign:"right",flexShrink:0}},
+          opt.isIncluded
+            ? h("span",{style:{padding:"4px 9px",borderRadius:999,background:T.successDim,color:T.success,fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}, "Включено")
+            : h(F,null,
+                h("div",{style:{fontSize:18,fontWeight:800,color:T.primary,whiteSpace:"nowrap"}}, "+"+fmt(opt.pricePerDay,cur)),
+                h("div",{style:{fontSize:11,color:T.textMuted}}, "в день")
+              )
+        )
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14,padding:12,background:active?"rgba(255,31,143,0.07)":T.surface,borderRadius:14}},
+        h("div",null,
+          h("div",{style:{fontSize:10,color:T.textMuted,fontWeight:600,letterSpacing:0.4,textTransform:"uppercase",marginBottom:4}}, "Ответственность"),
+          h("div",{style:{fontSize:18,fontWeight:800,color:T.text}}, opt.liability === "0 €" ? h("span",{style:{color:T.success}}, "0 €") : opt.liability)
+        ),
+        h("div",{style:{borderLeft:`1px solid ${T.border}`,paddingLeft:10}},
+          h("div",{style:{fontSize:10,color:T.textMuted,fontWeight:600,letterSpacing:0.4,textTransform:"uppercase",marginBottom:4}}, "Депозит"),
+          h("div",{style:{fontSize:18,fontWeight:800,color:T.text}}, opt.deposit === "0 €" ? h("span",{style:{color:T.success}}, "0 €") : opt.deposit)
+        ),
+      ),
+      h("div",{style:{marginTop:14,display:"grid",gap:8}},
+        opt.features.map((f,i)=>h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,fontSize:13,color:f.ok?T.text:T.textSubtle}},
+          h("span",{style:{width:16,height:16,borderRadius:"50%",background:f.ok?T.success:T.borderStrong,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, f.ok?h(I.check):h(I.cross)),
+          h("span",null, f.text)
+        ))
+      )
+    );
+  }
+
+  function ExtrasStep({state, extras, setExtras, onBack, onNext, cur, setCur, days:d}) {
+    const groups = {}; EXTRAS.forEach(e=>{ (groups[e.group]||=[]).push(e); });
+    const cnt = countExtras(extras);
+    const total = calcExtrasEur(extras, d);
+    const inc = (id)=>{ const ex = EXTRAS.find(e=>e.id===id); const cur = extras[id]||0; const next = Math.min(ex.max, cur+1); setExtras({...extras, [id]: next}); tap(8); };
+    const dec = (id)=>{ const cur = extras[id]||0; const next = Math.max(0, cur-1); const e = {...extras}; if (next===0) delete e[id]; else e[id]=next; setExtras(e); tap(8); };
+    const tog = (id)=>{ const cur = extras[id]||0; if (cur) dec(id); else inc(id); };
+    return h("div",null,
+      h(GlassHeader,{title:"Дополнительные услуги",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(StepBar,{step:1,onJump:(s)=>s===0&&onBack()}),
+      d>=8 && h("div",{style:{margin:"4px 16px 14px",padding:"10px 14px",background:T.primaryDim,color:T.primary,borderRadius:14,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:8}},
+        h(I.bolt), "При аренде от 8 дней — оплата только за 7"
+      ),
+      h("div",{style:{padding:"0 16px 24px"}},
+        Object.entries(groups).map(([g,items])=>h("div",{key:g,style:{marginBottom:18}},
+          h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.4,textTransform:"uppercase",marginBottom:8}}, g),
+          h("div",{style:{display:"grid",gap:8}},
+            items.map(ex=>{
+              const count = extras[ex.id]||0;
+              const sel = count>0;
+              const itemTotal = (ex.perDay?ex.price*Math.max(d,1):ex.price)*count;
+              return h("div",{key:ex.id,style:{padding:"12px 14px",background:sel?T.primaryDim:T.surface,border:`1.5px solid ${sel?T.primary:"transparent"}`,borderRadius:14,display:"flex",alignItems:"center",gap:12}},
+                h("div",{style:{flex:1,minWidth:0}},
+                  h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, ex.name),
+                  h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, fmt(ex.price,cur)+(ex.perDay?"/день":""), sel && ex.perDay && " · итого "+fmt(itemTotal,cur))
+                ),
+                ex.max > 1
+                  ? h("div",{style:{display:"flex",alignItems:"center",gap:0,background:sel?T.primary:T.bgElev,borderRadius:999,color:sel?T.primaryText:T.text,flexShrink:0}},
+                      h(Pressable,{onClick:()=>dec(ex.id),disabled:!count,style:{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",opacity:count?1:0.4}}, h(I.minus)),
+                      h("span",{style:{minWidth:20,textAlign:"center",fontWeight:700,fontSize:14}}, count),
+                      h(Pressable,{onClick:()=>inc(ex.id),disabled:count>=ex.max,style:{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",opacity:count<ex.max?1:0.4}}, h(I.plus))
+                    )
+                  : h(Pressable,{onClick:()=>tog(ex.id),style:{width:30,height:30,borderRadius:8,border:`2px solid ${sel?T.primary:T.borderStrong}`,background:sel?T.primary:"transparent",color:T.primaryText,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, sel && h(I.check))
+              );
+            })
+          )
+        ))
+      ),
+      h("div",{style:{position:"sticky",bottom:0,zIndex:10,background:T.glass,backdropFilter:"saturate(180%) blur(18px)",borderTop:"0.5px solid "+T.border,padding:"12px 16px",paddingBottom:sbPlus(12),display:"flex",alignItems:"center",gap:12}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.4}}, "Услуги"),
+          h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, cnt?cnt+" поз. · +"+fmt(total,cur):"Не выбрано")
+        ),
+        h(PrimaryBtn,{onClick:onNext,full:false,style:{minWidth:140}}, cnt?"Далее":"Пропустить")
+      )
+    );
+  }
+
+  function BookingSummary({car, state, ins, extras, docs, setDocs, contact, setContact, terms, setTerms, onBack, onSubmit, cur, setCur, jumpStep, days:d}) {
+    const insOpt = INSURANCES.find(i=>i.id===ins);
+    const carCost = car.pricePerDay * d;
+    const insCost = insOpt.pricePerDay * d;
+    const sur = calcSurchargesEur(state);
+    const extrasCost = calcExtrasEur(extras, d);
+    const fee = SERVICE_FEE_EUR;
+    const total = carCost + insCost + sur + extrasCost + fee;
+    const pickup = LOCATIONS.find(l=>l.id===state.pickupLoc);
+    const ret = LOCATIONS.find(l=>l.id===state.returnLoc);
+    const cnt = countExtras(extras);
+    const docsReady = docs.passport && docs.license;
+    const isCompany = contact.kind === "company";
+    const setC = (k,v)=>setContact({...contact,[k]:v});
+    const valid = contact.firstName && contact.lastName && contact.email && contact.phone && terms && (!isCompany || (contact.companyPib && contact.companyPib.length>=8));
+
+    function uploadDoc(kind, file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => { setDocs({...docs, [kind]: e.target.result}); tap(15); };
+      reader.readAsDataURL(file);
+    }
+
+    return h("div",null,
+      h(GlassHeader,{title:"Бронирование",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(StepBar,{step:2,onJump:jumpStep}),
+
+      h("div",{style:{margin:"4px 16px 14px",padding:14,background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,display:"flex",alignItems:"center",gap:14}},
+        h("div",{style:{width:80,height:50,background:T.surface,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+          h("img",{src:carImg(car.color),alt:"",style:{maxWidth:"96%",maxHeight:"96%"}})
+        ),
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:16,fontWeight:700,color:T.text}}, car.model),
+          h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, car.category+" · "+car.transmission+" · "+car.fuel)
+        )
+      ),
+
+      h("div",{style:{margin:"0 16px 12px",padding:"14px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,display:"grid",gridTemplateColumns:"1fr 60px 1fr",alignItems:"center",gap:8}},
+        h("div",null,
+          h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, "Получение"),
+          h("div",{style:{fontSize:14,fontWeight:700,marginTop:4,color:T.text}}, fmtDay(state.pickupDate)),
+          h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, state.pickupTime)
+        ),
+        h("svg",{width:60,height:24,viewBox:"0 0 60 24"},
+          h("path",{d:"M 4 18 Q 30 2 56 18",stroke:T.borderStrong,strokeWidth:1,fill:"none",strokeDasharray:"3 4"}),
+          h("circle",{cx:4,cy:18,r:2.5,fill:T.primary}),
+          h("circle",{cx:56,cy:18,r:2.5,fill:T.primary})
+        ),
+        h("div",{style:{textAlign:"right"}},
+          h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, "Возврат"),
+          h("div",{style:{fontSize:14,fontWeight:700,marginTop:4,color:T.text}}, fmtDay(state.returnDate)),
+          h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, state.returnTime)
+        )
+      ),
+
+      h("div",{style:{margin:"0 16px 12px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,overflow:"hidden"}},
+        h(SummaryLocLine,{loc:pickup,time:state.pickupTime,label:"Получение",cur}),
+        h("div",{style:{height:0.5,background:T.border}}),
+        h(SummaryLocLine,{loc:ret,time:state.returnTime,label:"Возврат",cur})
+      ),
+
+      h(EditableRow,{label:"ЗАЩИТА",icon:h(I.shield),title:insOpt.name,sub:"Депозит "+insOpt.deposit+" · отв. "+insOpt.liability,
+        right: insOpt.isIncluded ? h("span",{style:{fontSize:11,color:T.success,fontWeight:600}},"Включено") : h("div",{style:{fontSize:14,fontWeight:700,color:T.primary}}, "+"+fmt(insCost,cur)),
+        onEdit:()=>jumpStep&&jumpStep(0)}),
+      h(EditableRow,{label:"УСЛУГИ",icon:h(I.spark),title:cnt?cnt+" поз. выбрано":"Без услуг",sub:cnt?summarizeExtras(extras):"Можно добавить",
+        right: cnt ? h("div",{style:{fontSize:14,fontWeight:700,color:T.primary}}, "+"+fmt(extrasCost,cur)) : null,
+        onEdit:()=>jumpStep&&jumpStep(1)}),
+
+      h("div",{style:{padding:"4px 16px 0"}},
+        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:8}},
+          h("h3",{style:{fontSize:14,fontWeight:700,margin:0,color:T.text}}, "Документы"),
+          docsReady && h("span",{style:{fontSize:11,color:T.success,fontWeight:600,display:"flex",alignItems:"center",gap:4}}, h(I.check), "Договор готовится")
+        ),
+        h("div",{style:{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.4}}, "Загрузите фото паспорта и прав. Договор будет готов до вашего приезда — экономия 15–20 минут на оформлении."),
+        h("div",{style:{display:"grid",gap:8}},
+          h(DocCard,{kind:"passport",icon:h(I.doc),label:"Паспорт",doc:docs.passport,onUpload:(f)=>uploadDoc("passport",f),onClear:()=>setDocs({...docs,passport:null})}),
+          h(DocCard,{kind:"license",icon:h(I.license),label:"Водительские права",doc:docs.license,onUpload:(f)=>uploadDoc("license",f),onClear:()=>setDocs({...docs,license:null})}),
+        )
+      ),
+
+      h("div",{style:{padding:"18px 16px 0"}},
+        h("h3",{style:{fontSize:14,fontWeight:700,margin:"0 0 6px",color:T.text}}, "Контактные данные"),
+        h("div",{style:{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.4}}, "Договор и инструкции по оплате придут на указанный e-mail.")
+      ),
+      h("div",{style:{display:"flex",gap:8,padding:"0 16px"}},
+        h(Pressable,{onClick:()=>setC("kind","person"),style:{flex:1,padding:"10px 12px",borderRadius:12,background:!isCompany?T.primary:T.surface,color:!isCompany?T.primaryText:T.text,display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontWeight:600,fontSize:13}}, h(I.user), "Физлицо"),
+        h(Pressable,{onClick:()=>setC("kind","company"),style:{flex:1,padding:"10px 12px",borderRadius:12,background:isCompany?T.primary:T.surface,color:isCompany?T.primaryText:T.text,display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontWeight:600,fontSize:13}}, h(I.building), "Компания")
+      ),
+      h("div",{style:{padding:"10px 16px 0",display:"grid",gap:10}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+          h(Field,{label:"Имя",value:contact.firstName,onChange:v=>setC("firstName",v),placeholder:"Иван"}),
+          h(Field,{label:"Фамилия",value:contact.lastName,onChange:v=>setC("lastName",v),placeholder:"Иванов"}),
+        ),
+        h(Field,{label:"E-mail",value:contact.email,onChange:v=>setC("email",v),placeholder:"you@example.com",type:"email"}),
+        h(Field,{label:"Телефон",value:contact.phone,onChange:v=>setC("phone",v),placeholder:"+381 60 000 0000",type:"tel"}),
+        isCompany && h(Field,{label:"PIB компании",value:contact.companyPib,onChange:v=>setC("companyPib",v.replace(/\D/g,"").slice(0,9)),placeholder:"8 или 9 цифр"})
+      ),
+
+      h("div",{style:{padding:"18px 16px 0"}},
+        h("h3",{style:{fontSize:14,fontWeight:700,margin:"0 0 8px",color:T.text}}, "Стоимость"),
+        h("div",{style:{padding:"4px 14px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18}},
+          h(Line,{l:`${fmt(car.pricePerDay,cur)} × ${d} дн.`,v:fmt(carCost,cur)}),
+          !insOpt.isIncluded && h(Line,{l:"Защита",v:fmt(insCost,cur)}),
+          extrasCost>0 && h(Line,{l:"Услуги ("+cnt+")",v:fmt(extrasCost,cur)}),
+          pickup.priceEur > 0 && h(Line,{l:"Получение в "+(pickup.type==="airport"?"аэропорту":"месте"),v:"+"+fmt(pickup.priceEur,cur)}),
+          ret.priceEur > 0 && h(Line,{l:"Возврат в "+(ret.type==="airport"?"аэропорту":"месте"),v:"+"+fmt(ret.priceEur,cur)}),
+          isOffHours(state.pickupTime) && h(Line,{l:"Получение вне 09:00–18:00",v:fmtSurcharge("offHours",cur)}),
+          isOffHours(state.returnTime) && h(Line,{l:"Возврат вне 09:00–18:00",v:fmtSurcharge("offHours",cur)}),
+          h(Line,{l:"Сбор за бронирование",v:fmt(fee,cur)}),
+          h("div",{style:{height:0.5,background:T.border,margin:"8px 0"}}),
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"8px 0"}},
+            h("span",{style:{fontSize:14,fontWeight:700,color:T.text}}, "По договору"),
+            h("span",{style:{fontSize:22,fontWeight:800,color:T.primary}}, fmt(total,cur))
+          )
+        ),
+        h("div",{style:{fontSize:11,color:T.textMuted,marginTop:8,padding:"0 4px"}}, "Оплата по ссылке из письма — без комиссий приложения.")
+      ),
+
+      h("div",{style:{padding:"14px 16px 8px"}},
+        h(Pressable,{onClick:()=>setTerms(!terms),style:{display:"flex",alignItems:"flex-start",gap:12,padding:"6px 0",width:"100%"}},
+          h("span",{style:{width:22,height:22,borderRadius:6,border:`1.5px solid ${terms?T.primary:T.borderStrong}`,background:terms?T.primary:"transparent",color:T.primaryText,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}, terms && h(I.check)),
+          h("span",{style:{fontSize:13,lineHeight:1.4,color:T.text}}, "Согласен с обработкой персональных данных и условиями договора, который придёт на почту.")
+        )
+      ),
+
+      h("div",{style:{height:104}}),
+
+      h("div",{style:{position:"sticky",bottom:0,zIndex:10,background:T.glass,backdropFilter:"saturate(180%) blur(18px)",borderTop:"0.5px solid "+T.border,padding:"12px 16px",paddingBottom:sbPlus(12),display:"flex",alignItems:"center",gap:12}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.4}}, "По договору"),
+          h("div",{style:{fontSize:22,fontWeight:800,color:T.primary}}, fmt(total,cur))
+        ),
+        h(PrimaryBtn,{onClick:onSubmit,disabled:!valid,full:false,style:{minWidth:160}}, "Забронировать")
+      )
+    );
+  }
+
+  function summarizeExtras(extras) {
+    const items = Object.entries(extras||{}).filter(([,c])=>c>0).slice(0,2).map(([id,c])=>{
+      const ex = EXTRAS.find(e=>e.id===id);
+      return ex ? (c>1 ? ex.name+" ×"+c : ex.name) : "";
+    });
+    const all = Object.entries(extras||{}).filter(([,c])=>c>0);
+    if (all.length > 2) items.push("+"+(all.length-2));
+    return items.join(", ");
+  }
+
+  function SummaryLocLine({loc, time, label, cur}) {
+    const ic = locIconStyle(loc);
+    const display = locDisplay(loc, label === "Получение" ? "pickup" : "return");
+    const pill = pricePillProps(loc, false, cur);
+    return h("div",{style:{padding:"14px",display:"flex",alignItems:"center",gap:12}},
+      h("span",{style:{width:36,height:36,borderRadius:12,background:ic.bg,color:ic.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:700}}, loc.code || h(loc.type==="airport"?I.plane:loc.type==="office"?I.home:I.truck)),
+      h("div",{style:{flex:1,minWidth:0}},
+        h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, label),
+        h("div",{style:{fontSize:14,fontWeight:600,marginTop:2,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, display.name),
+        h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, display.subtitle+" · "+time)
+      ),
+      h("span",{style:{padding:"3px 8px",borderRadius:999,background:pill.bg,color:pill.color,fontSize:11,fontWeight:700,whiteSpace:"nowrap",minWidth:46,textAlign:"center",flexShrink:0}}, pill.text)
+    );
+  }
+
+  function EditableRow({label,icon,title,sub,right,onEdit}) {
+    return h(Pressable,{onClick:onEdit,style:{margin:"0 16px 12px",padding:"14px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,width:"calc(100% - 32px)",display:"flex",alignItems:"center",gap:12}},
+      h("span",{style:{width:38,height:38,borderRadius:12,background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
+      h("div",{style:{flex:1,minWidth:0}},
+        h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, label),
+        h("div",{style:{fontSize:14,fontWeight:600,marginTop:2,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, title),
+        sub && h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, sub)
+      ),
+      h("div",{style:{display:"flex",alignItems:"center",gap:8,flexShrink:0}},
+        right,
+        h("span",{style:{color:T.textSubtle}}, h(I.edit))
+      )
+    );
+  }
+
+  function DocCard({kind,icon,label,doc,onUpload,onClear}) {
+    const inputRef = useRef(null);
+    return h("div",{style:{padding:"12px 14px",background:doc?T.successDim:T.surface,border:`1.5px solid ${doc?T.success:"transparent"}`,borderRadius:14,display:"flex",alignItems:"center",gap:12,position:"relative"}},
+      h("input",{type:"file",accept:"image/*",ref:inputRef,style:{display:"none"},onChange:(e)=>onUpload&&onUpload(e.target.files[0])}),
+      doc
+        ? h("img",{src:doc,alt:"",style:{width:50,height:50,borderRadius:10,objectFit:"cover",flexShrink:0,border:"1px solid "+T.border}})
+        : h("span",{style:{width:50,height:50,borderRadius:10,background:T.bgElev,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
+      h("div",{style:{flex:1,minWidth:0}},
+        h("div",{style:{fontSize:14,fontWeight:600,color:T.text}}, label),
+        h("div",{style:{fontSize:12,color:doc?T.success:T.textMuted,marginTop:2}}, doc?"Загружено ✓":"Нажмите, чтобы загрузить")
+      ),
+      doc
+        ? h(Pressable,{onClick:onClear,style:{padding:"6px 10px",background:T.bgElev,color:T.text,borderRadius:8,fontSize:12,fontWeight:600,flexShrink:0}}, "Удалить")
+        : h(Pressable,{onClick:()=>inputRef.current&&inputRef.current.click(),style:{padding:"6px 10px",background:T.primary,color:"#fff",borderRadius:8,fontSize:12,fontWeight:600,flexShrink:0}}, "Загрузить")
+    );
+  }
+
+  function Field({label,value,onChange,placeholder,type}) {
+    const [focus,setFocus]=useState(false);
+    return h("label",{style:{display:"block"}},
+      h("div",{style:{fontSize:12,color:T.textMuted,marginBottom:6,fontWeight:500}}, label),
+      h("input",{type:type||"text",value:value||"",onChange:(e)=>onChange(e.target.value),onFocus:()=>setFocus(true),onBlur:()=>setFocus(false),placeholder,style:{width:"100%",minHeight:48,padding:"0 14px",background:T.surface,border:`1.5px solid ${focus?T.primary:"transparent"}`,borderRadius:14,fontSize:16,color:T.text,outline:"none",fontFamily:"inherit"}})
+    );
+  }
+
+  function Line({l,v}) {
+    return h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:13,padding:"6px 0"}},
+      h("span",{style:{color:T.textMuted}}, l),
+      h("span",{style:{fontWeight:600,color:T.text}}, v)
+    );
+  }
+
+  function Success({car, total, days, state, contact, cur, onDone}) {
+    const bookingNo = useMemo(()=>"VR-"+Math.floor(Math.random()*900000+100000),[]);
+    const email = contact.email || "your@email.com";
+    return h("div",null,
+      h(GlassHeader,{title:"",transparent:true}),
+      h("div",{style:{padding:"12px 16px 18px",textAlign:"center"}},
+        h("div",{style:{width:96,height:96,borderRadius:"50%",background:T.successDim,color:T.success,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}},
+          h("svg",{width:44,height:44,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:3,strokeLinecap:"round",strokeLinejoin:"round"}, h("path",{d:"M5 12l4 4 10-10"}))
+        ),
+        h("h1",{style:{fontSize:24,fontWeight:800,margin:"0 0 6px",color:T.text}}, "Бронь оформлена"),
+        h("div",{style:{fontSize:14,color:T.textMuted,lineHeight:1.5}},
+          car.model+" · "+days+" дн.",h("br"),
+          "№ ",h("b",{style:{color:T.text}}, bookingNo)
+        )
+      ),
+
+      h("div",{style:{margin:"0 16px 12px",padding:14,background:T.infoDim,borderRadius:18,display:"flex",alignItems:"flex-start",gap:12}},
+        h("span",{style:{width:36,height:36,borderRadius:12,background:T.info,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.mail)),
+        h("div",{style:{textAlign:"left",flex:1}},
+          h("div",{style:{fontSize:14,fontWeight:700,color:T.info}}, "Договор отправлен на почту"),
+          h("div",{style:{fontSize:13,color:T.text,marginTop:4,lineHeight:1.4}}, "Предварительный договор и инструкция по оплате — на ", h("b",null,email), ".")
+        )
+      ),
+
+      h("div",{style:{margin:"0 16px 12px",padding:"14px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18}},
+        h("div",{style:{fontSize:13,fontWeight:700,marginBottom:10,color:T.text}}, "Что дальше"),
+        [
+          ["1","Откройте письмо и ознакомьтесь с договором"],
+          ["2","Оплатите по ссылке — без комиссий приложения"],
+          ["3","Заберите авто " + fmtDayShort(state.pickupDate) + " в " + state.pickupTime + " — за 5 минут"],
+        ].map(([n,txt],i)=>h("div",{key:i,style:{display:"flex",alignItems:"flex-start",gap:10,padding:"6px 0"}},
+          h("span",{style:{width:22,height:22,borderRadius:"50%",background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:12,fontWeight:700}}, n),
+          h("div",{style:{fontSize:13,lineHeight:1.4,color:T.text}}, txt)
+        ))
+      ),
+
+      h("div",{style:{margin:"0 16px 14px",padding:14,background:T.surface,borderRadius:18}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"baseline"}},
+          h("span",{style:{fontSize:13,color:T.textMuted}}, "Сумма по договору"),
+          h("span",{style:{fontSize:22,fontWeight:800,color:T.primary}}, fmt(total,cur))
+        ),
+        h("div",{style:{fontSize:11,color:T.textMuted,marginTop:6}}, "Оплата вне приложения, без комиссий")
+      ),
+
+      h("div",{style:{padding:"0 16px 24px",paddingBottom:sbPlus(24)}},
+        h(PrimaryBtn,{onClick:onDone}, "На главную")
+      )
+    );
+  }
+
+  function App() {
+    const [view, setView] = useState("home");
+    const [sheet, setSheet] = useState(null);
+    const [car, setCar] = useState(null);
+    const [cur, setCur] = useState("EUR");
+    const [ins, setIns] = useState("reduced");
+    const [extras, setExtras] = useState({});
+    const [docs, setDocs] = useState({passport:null,license:null});
+    const [contact, setContact] = useState({kind:"person",firstName:"",lastName:"",email:"",phone:"",companyPib:""});
+    const [terms, setTerms] = useState(false);
+    const [s, setS] = useState({
+      pickupLoc:"airport-bg", pickupDate:todayPlus(2), pickupTime:"10:00",
+      returnLoc:"airport-bg", returnDate:todayPlus(5), returnTime:"10:00",
+    });
+
+    const insOpt = INSURANCES.find(i=>i.id===ins);
+    const d = days(s.pickupDate,s.returnDate);
+    const total = useMemo(()=>{
+      if(!car) return 0;
+      const sur = calcSurchargesEur(s);
+      return car.pricePerDay*d + insOpt.pricePerDay*d + calcExtrasEur(extras,d) + sur + SERVICE_FEE_EUR;
+    },[car,s,insOpt,extras,d]);
+
+    const submit = ()=>{ tap(20); setView("success"); window.scrollTo&&window.scrollTo(0,0); };
+    const done = ()=>{
+      setView("home"); setCar(null); setIns("reduced"); setExtras({});
+      setDocs({passport:null,license:null}); setContact({kind:"person",firstName:"",lastName:"",email:"",phone:"",companyPib:""}); setTerms(false); tap(8);
+    };
+    const jumpStep = (st)=>{ if(st===0) setView("insurance"); else if(st===1) setView("extras"); else if(st===2) setView("summary"); };
+
+    // Auto scroll to top on view change
+    const scroller = document.getElementById("app");
+    useEffect(()=>{ if(scroller) scroller.scrollTop = 0; },[view]);
+
+    return h("div",{style:{minHeight:"100%",background:T.bg,color:T.text,fontFamily:"inherit",position:"relative"}},
+      view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur}),
+      view==="catalog" && h(Catalog,{state:s,onBack:()=>setView("home"),onSelect:(c)=>{setCar(c); setView("detail"); tap(8);},onEdit:()=>setView("home"),cur,setCur}),
+      view==="detail" && car && h(CarDetail,{car,state:s,onBack:()=>setView("catalog"),onConfirm:()=>{setView("insurance"); tap(10);},cur,setCur}),
+      view==="insurance" && car && h(InsuranceStep,{state:s,ins,setIns,onBack:()=>setView("detail"),onNext:()=>{setView("extras"); tap(10);},cur,setCur,days:d}),
+      view==="extras" && car && h(ExtrasStep,{state:s,extras,setExtras,onBack:()=>setView("insurance"),onNext:()=>{setView("summary"); tap(10);},cur,setCur,days:d}),
+      view==="summary" && car && h(BookingSummary,{car,state:s,ins,extras,docs,setDocs,contact,setContact,terms,setTerms,onBack:()=>setView("extras"),onSubmit:submit,cur,setCur,jumpStep,days:d}),
+      view==="success" && car && h(Success,{car,total,days:d,state:s,contact,cur,onDone:done}),
+
+      h(DateSheet,{open:sheet==="date",onClose:()=>setSheet(null),value:{start:s.pickupDate,end:s.returnDate},onConfirm:(v)=>{setS({...s,pickupDate:v.start,returnDate:v.end});setSheet(null);}}),
+      h(LocSheet,{open:sheet==="loc-pickup",onClose:()=>setSheet(null),valueLoc:s.pickupLoc,valueTime:s.pickupTime,onConfirm:(v)=>{setS({...s,pickupLoc:v.loc,pickupTime:v.time});setSheet(null);},title:"Где забрать?",timeLabel:"Время получения",cur,context:"pickup"}),
+      h(LocSheet,{open:sheet==="loc-return",onClose:()=>setSheet(null),valueLoc:s.returnLoc,valueTime:s.returnTime,onConfirm:(v)=>{setS({...s,returnLoc:v.loc,returnTime:v.time});setSheet(null);},title:"Куда вернуть?",timeLabel:"Время возврата",cur,context:"return"}),
+    );
+  }
+
+  const root = document.getElementById("app");
+  root.innerHTML = "";
+  ReactDOM.createRoot(root).render(h(App));
+  } catch(err) {
+    var f=document.getElementById('fb');
+    if(f){f.style.display='block';f.textContent='Ошибка: '+(err && err.message || err);}
+    console.error(err);
+  }
+}
+if (document.readyState==="loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+</script>
+</body>
+</html>
