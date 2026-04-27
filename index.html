@@ -37,6 +37,19 @@
   h1, h2, h3, h4, h5, h6 { color: #0A0B0F; }
   button { font-family: inherit; }
   #fb { padding: 24px; text-align: center; color: #8A8A95; font-size: 13px; }
+  /* Лёгкие GPU-композированные анимации (только transform/opacity) */
+  @keyframes rcFadeUp     { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes rcFadeIn     { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rcScaleIn    { from { opacity: 0; transform: scale(0.78); } to { opacity: 1; transform: scale(1); } }
+  @keyframes rcSlideRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes rcFloatA     { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,-14px,0); } }
+  @keyframes rcFloatB     { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,12px,0); } }
+  @keyframes rcPulseBtn   { 0%,100% { box-shadow: 0 10px 24px rgba(0,0,0,0.18); transform: translateY(0); } 50% { box-shadow: 0 14px 32px rgba(0,0,0,0.26); transform: translateY(-2px); } }
+  @keyframes rcPulseDot   { 0%,100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.4); opacity: 0; } }
+  @keyframes rcSwap       { 0% { opacity: 0; transform: translateY(8px); } 15%,85% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-8px); } }
+  @keyframes rcRing       { 0% { transform: scale(0.7); opacity: 0.55; } 100% { transform: scale(2.4); opacity: 0; } }
+  @keyframes rcWiggle     { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-12deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(12deg); } }
+  @keyframes rcDrift      { from { transform: translateX(-30%); } to { transform: translateX(130%); } }
 </style>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -784,6 +797,21 @@ function boot(){
     const perDay = pricePerDayFor(car.pricePerDay, d);
     const total = perDay * (d||1) + sur;
     const activeTier = tierFor(d);
+    const tiersRef = useRef(null);
+    const activeIdx = PRICE_TIERS.findIndex(t=>t.minDays===activeTier.minDays);
+    // Центрируем активный тир в карусели при первом отображении.
+    useEffect(()=>{
+      const cont = tiersRef.current;
+      if (!cont || activeIdx < 0) return;
+      // двойной rAF — ждём пока браузер посчитает реальные размеры детей
+      const center = ()=>{
+        const child = cont.children[activeIdx];
+        if (!child) return;
+        const target = child.offsetLeft - (cont.clientWidth - child.offsetWidth) / 2;
+        cont.scrollLeft = Math.max(0, target);
+      };
+      requestAnimationFrame(()=>requestAnimationFrame(center));
+    }, [activeIdx]);
     return h("div",null,
       h(GlassHeader,{title:"",transparent:true,onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
       h("div",{style:{margin:`calc(-1 * (${ST} + 54px)) 0 0`,paddingTop:`calc(${ST} + 54px)`,background:T.surface,paddingBottom:14}},
@@ -810,11 +838,11 @@ function boot(){
           h("h2",{style:{fontSize:16,fontWeight:700,margin:0,color:T.text}}, "Стоимость аренды"),
           h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600}}, "чем дольше — тем выгоднее")
         ),
-        h("div",{style:{display:"flex",gap:8,overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",padding:"2px 0 4px",margin:"0 -16px",paddingLeft:16,paddingRight:16}},
+        h("div",{ref:tiersRef,style:{display:"flex",gap:8,overflowX:"auto",scrollSnapType:"x proximity",WebkitOverflowScrolling:"touch",padding:"2px 0 4px",margin:"0 -16px",paddingLeft:16,paddingRight:16}},
           PRICE_TIERS.map((t,i)=>{
             const tierPrice = Math.round(car.pricePerDay * t.mult);
             const isActive = activeTier && activeTier.minDays === t.minDays;
-            return h("div",{key:i,style:{flexShrink:0,scrollSnapAlign:"start",width:128,padding:"12px 10px",background:isActive?T.primary:T.surface,color:isActive?"#fff":T.text,borderRadius:16,border:isActive?"2px solid "+T.primary:"1px solid "+T.border,boxShadow:isActive?"0 6px 16px rgba(255,31,143,0.25)":"none",position:"relative"}},
+            return h("div",{key:i,style:{flexShrink:0,scrollSnapAlign:"center",width:128,padding:"12px 10px",background:isActive?T.primary:T.surface,color:isActive?"#fff":T.text,borderRadius:16,border:isActive?"2px solid "+T.primary:"1px solid "+T.border,boxShadow:isActive?"0 6px 16px rgba(255,31,143,0.25)":"none",position:"relative"}},
               h("div",{style:{display:"flex",alignItems:"center",gap:5,marginBottom:8}},
                 h("span",{style:{color:isActive?"#fff":T.primary,display:"flex"}}, h(I.cal)),
                 h("span",{style:{fontSize:11,fontWeight:700,color:isActive?"#fff":T.primary,letterSpacing:-0.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, t.label)
@@ -1282,10 +1310,350 @@ function boot(){
     );
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  //  ONBOARDING — первый запуск.
+  //  5 экранов: Hero → Язык → Возраст → Геолокация → Уведомления.
+  //  Каждый экран — full-screen с прогресс-точками сверху и sticky CTA.
+  //  Тексты написаны как «диалоговый менеджер»: тёплые, помогающие,
+  //  без юр-стращалок и без агрессивного маркетинга.
+  // ════════════════════════════════════════════════════════════════════
+  // Порядок: локальный → международный → русскоязычная аудитория.
+  const ONB_LANGS = [
+    { code:"sr", flag:"🇷🇸", label:"Srpski",  greeting:"Zdravo"   },
+    { code:"en", flag:"🇬🇧", label:"English", greeting:"Hi there" },
+    { code:"ru", flag:"🇷🇺", label:"Русский", greeting:"Привет"   },
+  ];
+
+  // Hello-последовательность для cursive welcome (Apple-style).
+  // latin:true → cursive italic (Snell Roundhand). Иначе native script.
+  const HELLO_SEQUENCE = [
+    { w:"hello",     latin:true  },
+    { w:"Здраво",    latin:false },
+    { w:"Привет",    latin:false },
+    { w:"Bonjour",   latin:true  },
+    { w:"你好",       latin:false },
+    { w:"Hola",      latin:true  },
+    { w:"안녕하세요",   latin:false },
+    { w:"Ciao",      latin:true  },
+    { w:"नमस्ते",      latin:false },
+    { w:"Olá",       latin:true  },
+    { w:"مرحبا",      latin:false },
+    { w:"Hej",       latin:true  },
+  ];
+
+  // ── i18n для онбординга — минимум текста, всё переведено ──
+  const I18N = {
+    ru: {
+      preTitle:"Аренда авто", tagline:"Без депозита и очередей",
+      poehali:"Поехали", continue:"Продолжить", later:"Позже",
+      byTerms:"Продолжая, вы принимаете условия использования",
+      reviews:"отзывов", trips:"поездок", quick:"мин · до ключей",
+      ageQ:"Возраст водителя", ageHelp:"Поможем подобрать авто и оформить договор",
+      ageWarnTitle:"Страховка обязательна", ageWarn:"Если хотя бы одному водителю до 21 года — без страховки взять авто нельзя. Подключим её на шаге защиты.",
+      geoTitle:"Покажем ближайшее", geoHelp:"Только в момент поиска. Без трекеров и фоновых запросов.",
+      geoAllow:"Разрешить геолокацию",
+      notifTitle:"Напомним вовремя", notifHelp:"Только важное по вашей брони",
+      notifAllow:"Разрешить уведомления",
+      promo:"Получать акции и спец-предложения", promoSub:"Например, −20% на первый прокат",
+      ageU21:"До 21", age2124:"21–24", age2569:"25–69", age70:"70+",
+    },
+    en: {
+      preTitle:"Car rental", tagline:"No deposit, no queues",
+      poehali:"Let's go", continue:"Continue", later:"Later",
+      byTerms:"By continuing, you accept the terms of service",
+      reviews:"reviews", trips:"trips", quick:"min · to keys",
+      ageQ:"Driver's age", ageHelp:"Helps us match the right car and contract",
+      ageWarnTitle:"Insurance required", ageWarn:"If any driver is under 21, insurance is required. We'll add it at the protection step.",
+      geoTitle:"Show what's nearest", geoHelp:"Only when searching. No trackers, no background pings.",
+      geoAllow:"Allow location",
+      notifTitle:"We'll remind you", notifHelp:"Only what matters for your booking",
+      notifAllow:"Allow notifications",
+      promo:"Send me deals and offers", promoSub:"Like −20% off your first rental",
+      ageU21:"Under 21", age2124:"21–24", age2569:"25–69", age70:"70+",
+    },
+    sr: {
+      preTitle:"Iznajmljivanje auta", tagline:"Bez depozita, bez čekanja",
+      poehali:"Idemo", continue:"Nastavi", later:"Kasnije",
+      byTerms:"Nastavkom prihvatate uslove korišćenja",
+      reviews:"recenzija", trips:"vožnji", quick:"min · do ključeva",
+      ageQ:"Godine vozača", ageHelp:"Pomaže da izaberemo auto i ugovor",
+      ageWarnTitle:"Osiguranje je obavezno", ageWarn:"Ako je bar jedan vozač mlađi od 21, osiguranje je obavezno. Dodaćemo ga u koraku zaštite.",
+      geoTitle:"Pokazaćemo najbliže", geoHelp:"Samo dok pretražujete. Bez trekera i pozadinskih zahteva.",
+      geoAllow:"Dozvoli lokaciju",
+      notifTitle:"Podsetićemo vas", notifHelp:"Samo važno o vašoj rezervaciji",
+      notifAllow:"Dozvoli obaveštenja",
+      promo:"Šalji mi ponude i akcije", promoSub:"Npr. −20% na prvo iznajmljivanje",
+      ageU21:"Do 21", age2124:"21–24", age2569:"25–69", age70:"70+",
+    },
+  };
+  function t(lang, key) { return (I18N[lang] || I18N.ru)[key] || I18N.ru[key]; }
+  const ONB_AGE_CODES = ["u21","21-24","25-69","70+"];
+  const ONB_AGE_KEYS  = ["ageU21","age2124","age2569","age70"];
+
+  function ProgressDots({current, total}) {
+    return h("div",{style:{display:"flex",justifyContent:"center",gap:6,padding:"4px 0"}},
+      Array.from({length:total},(_,i)=>h("div",{key:i,style:{width:i===current?22:6,height:6,borderRadius:999,background:i===current?T.primary:(i<current?T.primary:T.border),transition:"width 0.25s ease, background 0.25s ease"}}))
+    );
+  }
+
+  function OnbHeader({step, total, onBack, onSkip}) {
+    return h("div",{style:{position:"sticky",top:0,zIndex:10,background:T.bg,paddingTop:ST}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 4px",minHeight:44}},
+        onBack ? h(Pressable,{onClick:onBack,style:{width:36,height:36,borderRadius:999,background:T.surface,color:T.text,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.back)) : h("div",{style:{width:36,height:36,flexShrink:0}}),
+        h("div",{style:{flex:1}}, h(ProgressDots,{current:step,total})),
+        onSkip ? h(Pressable,{onClick:onSkip,style:{padding:"8px 12px",fontSize:13,fontWeight:600,color:T.textMuted,flexShrink:0}}, "Пропустить") : h("div",{style:{width:36,flexShrink:0}})
+      )
+    );
+  }
+
+  // ── Step 1 — Welcome (брендовый момент в выбранном языке + animated counters) ──
+  function OnbWelcome({onNext, lang}) {
+    return h("div",{style:{minHeight:"100vh",background:`linear-gradient(165deg, ${T.primary} 0%, ${shade(T.primary,-32)} 100%)`,color:"#fff",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}},
+      // Декоративные плавающие сферы
+      h("div",{style:{position:"absolute",top:-110,right:-110,width:320,height:320,borderRadius:"50%",background:"rgba(255,255,255,0.08)",animation:"rcFloatA 7s ease-in-out infinite",willChange:"transform"}}),
+      h("div",{style:{position:"absolute",bottom:-140,left:-80,width:280,height:280,borderRadius:"50%",background:"rgba(255,255,255,0.06)",animation:"rcFloatB 9s ease-in-out infinite",willChange:"transform"}}),
+      h("div",{style:{position:"absolute",top:"40%",right:-30,width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)",animation:"rcFloatA 5s ease-in-out infinite 1s",willChange:"transform"}}),
+
+      h("div",{style:{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",textAlign:"center",padding:`${stPlus(28)} 24px 20px`,position:"relative",zIndex:1}},
+        // Лого с pulse-кругами
+        h("div",{style:{position:"relative",margin:"0 0 22px",animation:"rcScaleIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both"}},
+          h("div",{style:{position:"absolute",inset:-8,borderRadius:"50%",background:"rgba(255,255,255,0.25)",animation:"rcPulseDot 2.4s ease-out infinite",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:"rgba(255,255,255,0.18)",animation:"rcPulseDot 2.4s ease-out infinite 0.6s",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"relative",width:108,height:108,borderRadius:"50%",background:"rgba(255,255,255,0.22)",border:"3px solid rgba(255,255,255,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,fontWeight:800,letterSpacing:-0.5,backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}}, BRAND.short)
+        ),
+        // Название
+        h("div",{style:{fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",opacity:0.85,marginBottom:6,animation:"rcFadeUp 0.6s ease-out 0.15s both"}}, t(lang,"preTitle")),
+        h("h1",{style:{fontSize:36,fontWeight:800,margin:"0 0 14px",lineHeight:1.05,letterSpacing:-0.6,color:"#fff",animation:"rcFadeUp 0.7s ease-out 0.25s both"}}, BRAND.name),
+        h("div",{style:{fontSize:17,opacity:0.95,lineHeight:1.4,maxWidth:320,marginBottom:30,fontWeight:500,animation:"rcFadeUp 0.7s ease-out 0.4s both"}}, t(lang,"tagline")),
+        // Stats — animated counters, числа тикают вверх с задержкой
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,width:"100%",maxWidth:340}},
+          [
+            { v:h("span",null,"★",h(Counter,{to:BRAND.rating,decimals:1,delay:600})),         sub:t(lang,"reviews") },
+            { v:h("span",null,h(Counter,{to:BRAND.totalTrips/1000,decimals:1,delay:800}),"K+"), sub:t(lang,"trips")   },
+            { v:h("span",null,"~",h(Counter,{to:5,delay:1000})),                              sub:t(lang,"quick")   },
+          ].map((s,i)=>
+            h("div",{key:i,style:{padding:"14px 6px",background:"rgba(255,255,255,0.16)",borderRadius:14,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",textAlign:"center",animation:`rcFadeUp 0.5s ease-out ${0.45+i*0.1}s both`}},
+              h("div",{style:{fontSize:22,fontWeight:800,color:"#fff",letterSpacing:-0.4,lineHeight:1.05,whiteSpace:"nowrap"}}, s.v),
+              h("div",{style:{fontSize:11,color:"rgba(255,255,255,0.85)",marginTop:4,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, s.sub)
+            ))
+        )
+      ),
+      h("div",{style:{padding:"16px 20px",paddingBottom:sbPlus(16),position:"relative",zIndex:1,animation:"rcFadeUp 0.6s ease-out 1s both"}},
+        h(Pressable,{onClick:onNext,style:{width:"100%",minHeight:56,padding:"0 20px",background:"#fff",color:T.primary,borderRadius:16,fontSize:17,fontWeight:800,letterSpacing:0.2,display:"flex",alignItems:"center",justifyContent:"center",gap:8,animation:"rcPulseBtn 2.6s ease-in-out infinite 1.4s",willChange:"transform,box-shadow"}}, t(lang,"poehali"), h("span",{style:{fontSize:18}}, "→")),
+        h("div",{style:{textAlign:"center",fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:12}}, t(lang,"byTerms"))
+      )
+    );
+  }
+
+  // ── Anim Counter — числа считают вверх с ease-out ──
+  function Counter({to, decimals=0, suffix="", delay=0}) {
+    const [val, setVal] = useState(0);
+    useEffect(()=>{
+      let raf, startT = performance.now() + delay;
+      const tick = (now)=>{
+        const p = Math.max(0, Math.min((now - startT) / 1400, 1));
+        const eased = 1 - Math.pow(1 - p, 3);
+        setVal(to * eased);
+        if (p < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return ()=>cancelAnimationFrame(raf);
+    },[to, delay]);
+    return (decimals>0 ? val.toFixed(decimals) : Math.floor(val)) + suffix;
+  }
+
+  // ── Step 0 — Language. В стиле приложения: pink gradient hero + cards ──
+  function OnbLanguage({lang, setLang, onNext}) {
+    const greetings = [
+      {w:"Здраво",   flag:"🇷🇸"}, {w:"Hello",    flag:"🇬🇧"}, {w:"Привет",   flag:"🇷🇺"},
+      {w:"Bonjour",  flag:"🇫🇷"}, {w:"Hola",     flag:"🇪🇸"}, {w:"Ciao",     flag:"🇮🇹"},
+      {w:"你好",      flag:"🇨🇳"}, {w:"안녕",      flag:"🇰🇷"},
+    ];
+    const [gi, setGi] = useState(0);
+    useEffect(()=>{
+      const id = setInterval(()=>setGi(i=>(i+1)%greetings.length), 1500);
+      return ()=>clearInterval(id);
+    },[]);
+    const cur = greetings[gi];
+    return h("div",{style:{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}},
+      // Pink gradient hero (как home в приложении)
+      h("div",{style:{flex:"0 0 auto",position:"relative",background:`linear-gradient(165deg, ${T.primary} 0%, ${shade(T.primary,-30)} 100%)`,color:"#fff",padding:`${stPlus(28)} 24px 36px`,borderRadius:"0 0 32px 32px",overflow:"hidden",textAlign:"center"}},
+        h("div",{style:{position:"absolute",top:-80,right:-80,width:240,height:240,borderRadius:"50%",background:"rgba(255,255,255,0.10)",animation:"rcFloatA 7s ease-in-out infinite",willChange:"transform"}}),
+        h("div",{style:{position:"absolute",bottom:-100,left:-50,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,0.07)",animation:"rcFloatB 9s ease-in-out infinite",willChange:"transform"}}),
+        h("div",{style:{fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",opacity:0.85,marginBottom:14,position:"relative",zIndex:1,animation:"rcFadeUp 0.5s ease-out both"}}, BRAND.name),
+        h("div",{key:"flag-"+gi,style:{fontSize:54,lineHeight:1,marginBottom:10,animation:"rcSwap 1.5s ease-in-out both",willChange:"transform,opacity",position:"relative",zIndex:1}}, cur.flag),
+        h("div",{key:"word-"+gi,style:{fontSize:44,fontWeight:800,letterSpacing:-1,color:"#fff",animation:"rcSwap 1.5s ease-in-out both",willChange:"transform,opacity",lineHeight:1.05,position:"relative",zIndex:1}}, cur.w),
+        h("div",{style:{fontSize:24,marginTop:14,opacity:0.7,animation:"rcFloatA 2.4s ease-in-out infinite",position:"relative",zIndex:1,willChange:"transform"}}, "↓")
+      ),
+      h("div",{style:{flex:1,padding:"22px 16px 12px"}},
+        h("h1",{style:{fontSize:18,fontWeight:800,letterSpacing:-0.2,margin:"0 0 14px",color:T.text,textAlign:"center",animation:"rcFadeUp 0.4s ease-out 0.15s both"}}, "Выберите язык"),
+        h("div",{style:{display:"grid",gap:10}},
+          ONB_LANGS.map((L,i)=>{
+            const active = lang===L.code;
+            return h(Pressable,{key:L.code,onClick:()=>{setLang(L.code); tap(10);},style:{padding:"16px 18px",borderRadius:18,background:active?T.primary:T.surface,color:active?"#fff":T.text,border:"2px solid "+(active?T.primary:"transparent"),display:"flex",alignItems:"center",gap:14,width:"100%",animation:`rcFadeUp 0.45s ease-out ${0.2+i*0.08}s both`,boxShadow:active?"0 10px 24px rgba(255,31,143,0.30)":"0 1px 2px rgba(0,0,0,0.03)",transition:"box-shadow 0.2s ease, background 0.2s ease"}},
+              h("span",{style:{fontSize:32,flexShrink:0,lineHeight:1}}, L.flag),
+              h("div",{style:{flex:1,minWidth:0,textAlign:"left"}},
+                h("div",{style:{fontSize:18,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1}}, L.label),
+                h("div",{style:{fontSize:13,opacity:active?0.9:0.6,marginTop:3,fontWeight:500}}, L.greeting+" 👋")
+              ),
+              h("span",{style:{width:28,height:28,borderRadius:"50%",background:active?"rgba(255,255,255,0.28)":"transparent",border:"1.5px solid "+(active?"transparent":T.border),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,fontWeight:800,color:active?"#fff":"transparent",animation:active?"rcScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both":"none"}}, "✓")
+            );
+          })
+        )
+      ),
+      h("div",{style:{padding:"12px 16px",paddingBottom:sbPlus(16)}},
+        h(PrimaryBtn,{onClick:()=>{tap(15); onNext();},disabled:!lang}, "Продолжить →")
+      )
+    );
+  }
+
+  // ── Step 2 — Age. Grid 2×2 в стиле приложения, pink primary fill на active ──
+  function OnbAge({age, setAge, step, total, onBack, onNext, lang}) {
+    const isYoung = age==="u21";
+    return h("div",{style:{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}},
+      h(OnbHeader,{step,total,onBack,onSkip:null}),
+      h("div",{style:{flex:1,padding:"4px 20px 20px"}},
+        // Pulsing icon в primary-кружке
+        h("div",{style:{textAlign:"center",margin:"16px 0 18px",position:"relative"}},
+          h("div",{style:{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:88,height:88}},
+            h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.18,animation:"rcRing 2.6s ease-out infinite",willChange:"transform,opacity"}}),
+            h("div",{style:{position:"relative",width:80,height:80,borderRadius:"50%",background:T.primaryDim,fontSize:36,display:"flex",alignItems:"center",justifyContent:"center",animation:"rcScaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both"}}, "👤")
+          )
+        ),
+        h("h1",{style:{fontSize:24,fontWeight:800,margin:"0 0 6px",letterSpacing:-0.4,color:T.text,textAlign:"center",animation:"rcFadeUp 0.4s ease-out 0.1s both"}}, t(lang,"ageQ")),
+        h("p",{style:{fontSize:13,color:T.textMuted,margin:"0 0 22px",lineHeight:1.45,textAlign:"center",animation:"rcFadeUp 0.4s ease-out 0.18s both",maxWidth:320,marginLeft:"auto",marginRight:"auto"}}, t(lang,"ageHelp")),
+        // Grid 2x2 cards в стиле приложения
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+          ONB_AGE_CODES.map((code,i)=>{
+            const active = age===code;
+            return h(Pressable,{key:code,onClick:()=>{setAge(code); tap(8);},style:{padding:"22px 16px",borderRadius:18,background:active?T.primary:T.surface,color:active?"#fff":T.text,border:"2px solid "+(active?T.primary:"transparent"),display:"flex",alignItems:"center",justifyContent:"center",width:"100%",minHeight:80,animation:`rcFadeUp 0.45s ease-out ${0.26+i*0.06}s both`,position:"relative",boxShadow:active?"0 8px 20px rgba(255,31,143,0.30)":"0 1px 2px rgba(0,0,0,0.03)",transition:"box-shadow 0.2s ease, background 0.2s ease"}},
+              h("div",{style:{fontSize:22,fontWeight:800,letterSpacing:-0.4,textAlign:"center",lineHeight:1}}, t(lang,ONB_AGE_KEYS[i])),
+              active && h("span",{style:{position:"absolute",top:8,right:8,width:22,height:22,borderRadius:"50%",background:"rgba(255,255,255,0.28)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,animation:"rcScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both"}}, "✓")
+            );
+          })
+        ),
+        isYoung && h("div",{key:"u21-notice",style:{marginTop:14,padding:"14px 16px",background:T.warningDim,border:"1px solid "+T.warning,borderRadius:14,fontSize:13,color:T.text,lineHeight:1.5,animation:"rcFadeUp 0.3s ease-out both"}},
+          h("div",{style:{fontWeight:800,marginBottom:4,display:"flex",alignItems:"center",gap:6}}, "🛡 ", t(lang,"ageWarnTitle")),
+          t(lang,"ageWarn")
+        )
+      ),
+      h("div",{style:{padding:"12px 20px",paddingBottom:sbPlus(16),background:T.bg,borderTop:"0.5px solid "+T.border}},
+        h(PrimaryBtn,{onClick:()=>{tap(15); onNext();},disabled:!age}, t(lang,"continue")+" →")
+      )
+    );
+  }
+
+  // ── Step 3 — Geo. Pink primary CTA, ripple-волны от пина ──
+  function OnbLocation({step, total, onBack, onAllow, onSkip, lang}) {
+    return h("div",{style:{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}},
+      h(OnbHeader,{step,total,onBack,onSkip:null}),
+      h("div",{style:{flex:1,padding:"20px 24px 20px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",justifyContent:"center"}},
+        h("div",{style:{position:"relative",width:170,height:170,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 0 28px",animation:"rcScaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both"}},
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.16,animation:"rcRing 2.4s ease-out infinite",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.14,animation:"rcRing 2.4s ease-out infinite 0.8s",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.12,animation:"rcRing 2.4s ease-out infinite 1.6s",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"relative",width:100,height:100,borderRadius:"50%",background:`linear-gradient(160deg, ${T.primary} 0%, ${shade(T.primary,-25)} 100%)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,boxShadow:"0 14px 32px rgba(255,31,143,0.42)"}}, "📍")
+        ),
+        h("h1",{style:{fontSize:26,fontWeight:800,margin:"0 0 10px",letterSpacing:-0.4,color:T.text,animation:"rcFadeUp 0.4s ease-out 0.1s both",maxWidth:320}}, t(lang,"geoTitle")),
+        h("p",{style:{fontSize:14,color:T.textMuted,margin:"0",lineHeight:1.5,maxWidth:320,animation:"rcFadeUp 0.4s ease-out 0.2s both"}}, t(lang,"geoHelp"))
+      ),
+      h("div",{style:{padding:"12px 20px",paddingBottom:sbPlus(12),background:T.bg,borderTop:"0.5px solid "+T.border,display:"grid",gap:6}},
+        h(PrimaryBtn,{onClick:()=>{tap(20); onAllow();}}, t(lang,"geoAllow")),
+        h(Pressable,{onClick:()=>{tap(8); onSkip();},style:{width:"100%",minHeight:44,textAlign:"center",fontSize:14,color:T.primary,fontWeight:600,padding:"10px",display:"flex",alignItems:"center",justifyContent:"center"}}, t(lang,"later"))
+      )
+    );
+  }
+
+  // ── Step 4 — Notifications. Pink primary CTA, wiggle bell + ripple ──
+  function OnbNotif({step, total, onBack, onAllow, onSkip, marketing, setMarketing, lang}) {
+    return h("div",{style:{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}},
+      h(OnbHeader,{step,total,onBack,onSkip:null}),
+      h("div",{style:{flex:1,padding:"20px 24px 20px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}},
+        h("div",{style:{position:"relative",width:170,height:170,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 0 24px",animation:"rcScaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both"}},
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.14,animation:"rcRing 2.4s ease-out infinite",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"absolute",inset:0,borderRadius:"50%",background:T.primary,opacity:0.12,animation:"rcRing 2.4s ease-out infinite 1.2s",willChange:"transform,opacity"}}),
+          h("div",{style:{position:"relative",width:100,height:100,borderRadius:"50%",background:`linear-gradient(160deg, ${T.primary} 0%, ${shade(T.primary,-25)} 100%)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,boxShadow:"0 14px 32px rgba(255,31,143,0.42)",animation:"rcWiggle 3s ease-in-out infinite",transformOrigin:"50% 18%",willChange:"transform"}}, "🔔")
+        ),
+        h("h1",{style:{fontSize:26,fontWeight:800,margin:"0 0 10px",letterSpacing:-0.4,color:T.text,animation:"rcFadeUp 0.4s ease-out 0.1s both",maxWidth:320}}, t(lang,"notifTitle")),
+        h("p",{style:{fontSize:14,color:T.textMuted,margin:"0 0 22px",lineHeight:1.5,maxWidth:320,animation:"rcFadeUp 0.4s ease-out 0.2s both"}}, t(lang,"notifHelp")),
+        h("div",{style:{display:"flex",justifyContent:"center",gap:8,maxWidth:320,width:"100%",marginBottom:14,animation:"rcFadeUp 0.4s ease-out 0.28s both"}},
+          ["✉️","⏰","🔑","⚠️"].map((e,i)=>
+            h("div",{key:i,style:{flex:1,padding:"14px 0",borderRadius:14,background:T.surface,fontSize:24,textAlign:"center"}}, e))
+        ),
+        // Marketing opt-in — pink-themed
+        h(Pressable,{onClick:()=>{setMarketing(!marketing); tap(8);},style:{padding:"14px 16px",background:marketing?T.primaryDim:T.surface,border:"1.5px solid "+(marketing?T.primary:"transparent"),borderRadius:16,display:"flex",alignItems:"center",gap:12,width:"100%",maxWidth:360,textAlign:"left",animation:"rcFadeUp 0.4s ease-out 0.36s both",transition:"background 0.2s ease, border-color 0.2s ease"}},
+          h("div",{style:{flex:1,minWidth:0}},
+            h("div",{style:{fontSize:14,fontWeight:700,color:T.text,letterSpacing:-0.1}}, t(lang,"promo")),
+            h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, t(lang,"promoSub"))
+          ),
+          h("div",{style:{width:48,height:28,borderRadius:28,background:marketing?T.primary:"#E5E7EB",position:"relative",flexShrink:0,transition:"background 0.25s cubic-bezier(0.4,0,0.2,1)",boxShadow:marketing?"0 4px 10px rgba(255,31,143,0.30)":"none"}},
+            h("div",{style:{position:"absolute",top:2,left:marketing?22:2,width:24,height:24,borderRadius:"50%",background:"#fff",boxShadow:"0 2px 4px rgba(0,0,0,0.15)",transition:"left 0.25s cubic-bezier(0.4,0,0.2,1)"}})
+          )
+        )
+      ),
+      h("div",{style:{padding:"12px 20px",paddingBottom:sbPlus(12),background:T.bg,borderTop:"0.5px solid "+T.border,display:"grid",gap:6}},
+        h(PrimaryBtn,{onClick:()=>{tap(20); onAllow();}}, t(lang,"notifAllow")),
+        h(Pressable,{onClick:()=>{tap(8); onSkip();},style:{width:"100%",minHeight:44,textAlign:"center",fontSize:14,color:T.primary,fontWeight:600,padding:"10px",display:"flex",alignItems:"center",justifyContent:"center"}}, t(lang,"later"))
+      )
+    );
+  }
+
+  function Onboarding({onDone}) {
+    const [step, setStep] = useState(0);
+    const [lang, setLang] = useState("sr"); // дефолт — сербский (локальный)
+    const [age, setAge] = useState(null);
+    const [marketing, setMarketing] = useState(false);
+    const total = 5; // Language + Welcome + Age + Geo + Notif
+    const next = ()=>{ tap(10); if (step < total-1) setStep(step+1); };
+    const back = ()=>{ tap(8); if (step > 0) setStep(step-1); };
+
+    const finish = (locConsent, notifConsent)=>{
+      const prefs = { lang, age, locConsent, notifConsent, marketing, completedAt:Date.now() };
+      try { localStorage.setItem("rc-onboarded","1"); localStorage.setItem("rc-prefs", JSON.stringify(prefs)); } catch(e) {}
+      tap(20);
+      onDone(prefs);
+    };
+
+    const requestLocation = ()=>{
+      if (navigator.geolocation) {
+        try {
+          navigator.geolocation.getCurrentPosition(
+            ()=>nextWithLoc("granted"),
+            ()=>nextWithLoc("denied"),
+            { timeout: 5000 }
+          );
+        } catch(e) { nextWithLoc("error"); }
+      } else { nextWithLoc("unsupported"); }
+    };
+    const [locConsent, setLocConsent] = useState(null);
+    // Geo=step 3, после согласия → step 4 (Notif)
+    const nextWithLoc = (val)=>{ setLocConsent(val); setStep(4); tap(10); };
+    const skipLocation = ()=>{ setLocConsent("skipped"); setStep(4); tap(8); };
+
+    const requestNotif = ()=>{
+      if ("Notification" in window) {
+        try {
+          Notification.requestPermission().then(p=>finish(locConsent, p)).catch(()=>finish(locConsent,"error"));
+        } catch(e) { finish(locConsent,"error"); }
+      } else { finish(locConsent,"unsupported"); }
+    };
+    const skipNotif = ()=>{ finish(locConsent, "skipped"); };
+
+    // Порядок: Language=0 → Welcome=1 → Age=2 → Geo=3 → Notif=4
+    // ProgressDots — только на «конфигурационных» (Age/Geo/Notif).
+    if (step === 0) return h(OnbLanguage, {lang,setLang,onNext:next});
+    if (step === 1) return h(OnbWelcome, {onNext:next, lang});
+    if (step === 2) return h(OnbAge, {age,setAge,step:0,total:3,onBack:back,onNext:next,lang});
+    if (step === 3) return h(OnbLocation, {step:1,total:3,onBack:back,onAllow:requestLocation,onSkip:skipLocation,lang});
+    if (step === 4) return h(OnbNotif, {step:2,total:3,onBack:()=>setStep(3),onAllow:requestNotif,onSkip:skipNotif,marketing,setMarketing,lang});
+    return null;
+  }
+
   function App() {
-    // Старт всегда с Home (Aviasales-style).
+    // Первый запуск — показываем Onboarding (5 экранов). Если уже пройден — сразу Home.
     // Welcome (визитка) теперь доступен только через brand-pill в hero.
-    const [view, setView] = useState("home");
+    const onboarded = (()=>{ try { return localStorage.getItem("rc-onboarded") === "1"; } catch(e) { return false; } })();
+    const [view, setView] = useState(onboarded ? "home" : "onboarding");
     const [sheet, setSheet] = useState(null);
     const [car, setCar] = useState(null);
     const [cur, setCur] = useState("EUR");
@@ -1331,6 +1699,7 @@ function boot(){
     useEffect(()=>{ if(scroller) scroller.scrollTop = 0; },[view]);
 
     return h("div",{style:{minHeight:"100%",background:T.bg,color:T.text,fontFamily:"inherit",position:"relative"}},
+      view==="onboarding" && h(Onboarding,{onDone:()=>{setView("home"); tap(15);}}),
       view==="welcome" && h(Welcome,{onStart:startApp,onBack:()=>{setView("home"); tap(8);},onSheet:setSheet}),
       view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur,onAbout:openAbout,onPickCar:pickPopular}),
       view==="catalog" && h(Catalog,{state:s,onBack:()=>setView("home"),onSelect:(c)=>{setCar(c); setView("detail"); tap(8);},onEdit:()=>setView("home"),cur,setCur}),
