@@ -65,6 +65,38 @@ function boot(){
     danger:"#EF4444", dangerDim:"rgba(239,68,68,0.10)",
   };
 
+  // ════════════════════════════════════════════════════════════════════
+  //  BRAND — единая точка кастомизации для whitelabel.
+  //  При продаже приложения новому рентакару — меняется только этот блок.
+  //  Цвет акцента — T.primary выше.
+  // ════════════════════════════════════════════════════════════════════
+  const BRAND = {
+    name:        "RentCar Belgrade",     // полное имя в hero welcome-экрана
+    short:       "RC",                    // 2 буквы для лого-кружка
+    tagline:     "Аренда авто в Белграде",
+    yearFounded: 2018,
+    totalTrips:  12400,
+    rating:      4.9,
+    reviewsCount:1240,
+    legalName:   "RentCar Belgrade d.o.o.",   // юридическое имя для договора
+    pib:         "112345678",                  // PIB — налоговый номер РС (8–9 цифр)
+    mb:          "21987654",                   // MB — матичный номер ЮЛ (8 цифр)
+    licenceNo:   "PR-1234567",
+    benefits: [
+      { icon:"shield",  title:"Депозит от 0 €",      sub:"Без замораживания денег на карте" },
+      { icon:"bolt",    title:"Без очередей в офисе", sub:"Договор готов до вашего приезда" },
+      { icon:"chat",    title:"Поддержка 24/7",      sub:"WhatsApp, Telegram, телефон" },
+    ],
+    contacts: {
+      whatsapp: "https://wa.me/381600000000",
+      telegram: "https://t.me/rentcar_bg",
+      phone:    "+381 60 000 0000",
+      email:    "hello@rentcar.rs",
+      address:  "Bulevar V. Vilsona 8v, Beograd",
+      hours:    "Пн–Вс · 09:00–18:00",
+    }
+  };
+
   // ВНИМАНИЕ: курс RSD/EUR фиксированный для прототипа.
   // В продакшене подгружается из API (НБС / CBR / fixer.io) при старте и кэшируется на час.
   const RSD_PER_EUR = 117;
@@ -93,6 +125,39 @@ function boot(){
   const CATEGORIES = [["all","Все"],["Хэтчбек","Хэтчбек"],["Седан","Седан"],["Внедорожник","Внедорожник"]];
   const MILEAGE_OVERAGE_EUR = 0.30; // €/км сверх лимита
 
+  // ════════════════════════════════════════════════════════════════════
+  //  PRICE TIERS — скидка за длительность аренды.
+  //  car.pricePerDay в CARS — это базовая ставка за 1 день.
+  //  Для бронирования на N дней применяется множитель:
+  //    1 день      → 1.00 (базовая)
+  //    2 дня       → 0.89
+  //    3 дня       → 0.82
+  //    4–7 дней    → 0.76
+  //    8–15 дней   → 0.71
+  //    16–22 дней  → 0.67
+  //    23+ дней    → 0.62
+  //  Пропорция взята с vroom.rs (45 → 28 €/день для Transporter).
+  // ════════════════════════════════════════════════════════════════════
+  const PRICE_TIERS = [
+    { minDays: 1,  maxDays: 1,   mult: 1.00, label: "1 день"          },
+    { minDays: 2,  maxDays: 2,   mult: 0.89, label: "2 дня"           },
+    { minDays: 3,  maxDays: 3,   mult: 0.82, label: "3 дня"           },
+    { minDays: 4,  maxDays: 7,   mult: 0.76, label: "от 4 до 7 дней"  },
+    { minDays: 8,  maxDays: 15,  mult: 0.71, label: "от 8 до 15 дней" },
+    { minDays: 16, maxDays: 22,  mult: 0.67, label: "от 16 до 22 дней"},
+    { minDays: 23, maxDays: 365, mult: 0.62, label: "от 23 до 365 дней"},
+  ];
+
+  function pricePerDayFor(basePerDay, d) {
+    if (!d || d < 1) return basePerDay;
+    const tier = PRICE_TIERS.find(t => d >= t.minDays && d <= t.maxDays) || PRICE_TIERS[PRICE_TIERS.length-1];
+    return Math.round(basePerDay * tier.mult);
+  }
+  function tierFor(d) {
+    if (!d || d < 1) return PRICE_TIERS[0];
+    return PRICE_TIERS.find(t => d >= t.minDays && d <= t.maxDays) || PRICE_TIERS[PRICE_TIERS.length-1];
+  }
+
   const LOCATIONS = [
     { id:"office-bg", code:null, name:"Офис Белград", subtitle:"Bul. V. Vilsona 8v", type:"office", priceEur:0 },
     { id:"airport-bg", code:"BEG", name:"Аэропорт Белград", subtitle:"Терминал 2", type:"airport", priceEur:12 },
@@ -117,8 +182,6 @@ function boot(){
     { id:"booster", name:"Бустер", group:"Семья", price:5, perDay:true, max:3 },
     { id:"wifi", name:"4G Wi-Fi роутер", group:"Комфорт", price:5, perDay:true, max:1 },
     { id:"unlimited", name:"Безлимит на пробег", group:"Комфорт", price:5, perDay:true, max:1 },
-    { id:"roof-box", name:"Бокс на крышу", group:"Комфорт", price:20, perDay:true, max:1 },
-    { id:"pet-hammock", name:"Гамак для животных", group:"Комфорт", price:5, perDay:true, max:1 },
   ];
 
   function locDisplay(loc, context) {
@@ -357,9 +420,123 @@ function boot(){
 
   function locIconFor(loc) { if (!loc) return h(I.cal); if (loc.type==="airport") return h(I.plane); if (loc.type==="delivery") return h(I.truck); return h(I.home); }
 
-  function Home({state, onSheet, onSearch, cur, setCur}) {
+  // ── Welcome / About — карточка-визитка с фиксированной структурой ──
+  function Welcome({onStart, onBack, onSheet}) {
+    const benefitIcons = {shield:I.shield, bolt:I.bolt, chat:I.chat, refund:I.refund};
+    return h("div", {style:{minHeight:"100%",background:T.surface,paddingBottom:sbPlus(80)}},
+      // ──── HERO ────
+      h("div", {style:{
+        position:"relative",
+        background:`linear-gradient(160deg, ${T.primary} 0%, ${shade(T.primary,-25)} 100%)`,
+        padding:`${stPlus(14)} 20px 64px`,
+        color:"#fff",
+        textAlign:"center",
+        overflow:"hidden"
+      }},
+        h("div",{style:{position:"absolute",top:-50,right:-50,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,0.06)"}}),
+        h("div",{style:{position:"absolute",bottom:-60,left:-30,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}),
+        onBack && h(Pressable,{onClick:onBack,style:{position:"absolute",top:stPlus(8),left:12,width:36,height:36,borderRadius:999,background:"rgba(255,255,255,0.20)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",zIndex:5}}, h(I.back)),
+        h("div", {style:{
+          width:72, height:72, borderRadius:"50%",
+          background:"rgba(255,255,255,0.18)",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          margin:"0 auto 12px",
+          fontSize:24, fontWeight:800, letterSpacing:-0.4,
+          border:"2px solid rgba(255,255,255,0.3)",
+          color:"#fff",
+          position:"relative",zIndex:1
+        }}, BRAND.short),
+        h("h1", {style:{fontSize:24,fontWeight:800,margin:"0 0 4px",color:"#fff",letterSpacing:-0.3,position:"relative",zIndex:1}}, BRAND.name),
+        h("div", {style:{fontSize:13,opacity:0.92,position:"relative",zIndex:1}}, BRAND.tagline)
+      ),
+      // ──── TRUST ROW (overlap) ────
+      h("div", {style:{margin:"-44px 16px 16px",position:"relative",zIndex:2}},
+        h("div", {style:{
+          padding:"14px 10px",
+          background:T.bgElev,
+          borderRadius:18,
+          boxShadow:"0 10px 28px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.04)",
+          display:"grid",
+          gridTemplateColumns:"1fr 1fr 1fr",
+          gap:8,
+          textAlign:"center"
+        }},
+          h("div", null,
+            h("div", {style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3}}, "★ "+BRAND.rating),
+            h("div", {style:{fontSize:11,color:T.textMuted,marginTop:2}}, BRAND.reviewsCount.toLocaleString("ru-RU")+" отзывов")
+          ),
+          h("div", {style:{borderLeft:"0.5px solid "+T.border,borderRight:"0.5px solid "+T.border}},
+            h("div", {style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3}}, (BRAND.totalTrips/1000).toFixed(1).replace(/\.0$/,"")+"K+"),
+            h("div", {style:{fontSize:11,color:T.textMuted,marginTop:2}}, "поездок")
+          ),
+          h("div", null,
+            h("div", {style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3}}, (new Date().getFullYear()-BRAND.yearFounded)+" лет"),
+            h("div", {style:{fontSize:11,color:T.textMuted,marginTop:2}}, "на рынке")
+          )
+        )
+      ),
+      // ──── BENEFITS — компактные мини-чипы 3 в ряд ────
+      h("div", {style:{padding:"0 16px 16px"}},
+        h("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}},
+          BRAND.benefits.map((b,i)=>{
+            const Icon = benefitIcons[b.icon] || I.shield;
+            return h("div", {key:i, style:{padding:"12px 8px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:14,display:"flex",flexDirection:"column",alignItems:"center",gap:6,textAlign:"center"}},
+              h("span", {style:{width:32,height:32,borderRadius:10,background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(Icon)),
+              h("div", {style:{fontSize:11,fontWeight:700,color:T.text,letterSpacing:-0.1,lineHeight:1.2}}, b.title)
+            );
+          })
+        )
+      ),
+      // ──── INFO — реквизиты компании ────
+      h("div", {style:{padding:"0 16px 12px"}},
+        h("h2", {style:{fontSize:13,fontWeight:700,color:T.textMuted,letterSpacing:0.4,textTransform:"uppercase",margin:"0 0 8px",padding:"0 4px"}}, "О компании"),
+        h("div", {style:{background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,overflow:"hidden"}},
+          [
+            { label:"Название", value:BRAND.legalName },
+            { label:"PIB",       value:BRAND.pib       },
+            { label:"MB",        value:BRAND.mb        },
+            { label:"Лицензия",  value:BRAND.licenceNo },
+            { label:"Адрес",     value:BRAND.contacts.address },
+            { label:"Часы работы", value:BRAND.contacts.hours, sub:"Вне часов — надбавка +1 000 дин" },
+          ].map((row,i,arr)=>h("div",{key:i,style:{padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:12,borderBottom:i<arr.length-1?"0.5px solid "+T.border:"none"}},
+            h("div", {style:{fontSize:11,fontWeight:600,color:T.textMuted,letterSpacing:0.3,textTransform:"uppercase",width:88,flexShrink:0,marginTop:2}}, row.label),
+            h("div", {style:{flex:1,minWidth:0}},
+              h("div", {style:{fontSize:14,fontWeight:600,color:T.text,wordBreak:"break-word"}}, row.value),
+              row.sub && h("div", {style:{fontSize:11,color:T.textMuted,marginTop:2}}, row.sub)
+            )
+          ))
+        )
+      ),
+      // ──── CONTACT — единый primary-блок ────
+      h("div", {style:{padding:"0 16px 16px"}},
+        h(Pressable, {onClick:()=>onSheet&&onSheet("support"), style:{padding:"14px 16px",background:T.primary,borderRadius:18,display:"flex",alignItems:"center",gap:12,width:"100%"}},
+          h("span", {style:{width:40,height:40,borderRadius:12,background:"rgba(255,255,255,0.22)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, h(I.chat)),
+          h("div", {style:{flex:1,minWidth:0,textAlign:"left"}},
+            h("div", {style:{fontSize:14,fontWeight:700,color:"#fff"}}, "Связаться 24/7"),
+            h("div", {style:{fontSize:12,color:"rgba(255,255,255,0.85)",marginTop:2}}, "WhatsApp · Telegram · телефон · e-mail")
+          ),
+          h("span", {style:{color:"rgba(255,255,255,0.85)"}}, h(I.chev))
+        )
+      ),
+      // ──── STICKY CTA ────
+      h("div", {style:{
+        position:"sticky",bottom:0,zIndex:10,
+        background:T.glass,
+        backdropFilter:"saturate(180%) blur(18px)",
+        WebkitBackdropFilter:"saturate(180%) blur(18px)",
+        borderTop:"0.5px solid "+T.border,
+        padding:"12px 16px",
+        paddingBottom:sbPlus(12),
+      }},
+        h(PrimaryBtn, {onClick:onStart}, onBack ? "Найти авто" : "Начать поиск")
+      )
+    );
+  }
+
+  function Home({state, onSheet, onSearch, cur, setCur, onAbout, onPickCar}) {
     const pickup = LOCATIONS.find(l=>l.id===state.pickupLoc);
     const ret = LOCATIONS.find(l=>l.id===state.returnLoc);
+    const datesPicked = !!(state.pickupDate && state.returnDate);
     const d = days(state.pickupDate, state.returnDate);
     const pickupOff = isOffHours(state.pickupTime);
     const returnOff = isOffHours(state.returnTime);
@@ -367,39 +544,129 @@ function boot(){
     const rd = locDisplay(ret, "return");
     const pickupFee = (pickup?.priceEur||0) + (pickupOff?SURCHARGE.offHours.eur:0);
     const returnFee = (ret?.priceEur||0) + (returnOff?SURCHARGE.offHours.eur:0);
-    return h("div",null,
-      h("div",{style:{position:"relative",background:`linear-gradient(160deg, ${T.primary} 0%, ${shade(T.primary,-25)} 100%)`,padding:`${stPlus(20)} 20px 100px`,color:"#fff"}},
-        h(CurrencyToggle,{cur,setCur,onLight:true}),
-        h("h1",{style:{fontSize:30,fontWeight:700,margin:"0 0 6px",lineHeight:1.1,letterSpacing:-0.5,color:"#fff"}}, "Куда поедем?"),
-        h("div",{style:{fontSize:14,opacity:0.85}}, "Авто за 60 секунд")
-      ),
-      h("div",{style:{margin:"-78px 16px 20px",padding:14,background:T.bgElev,borderRadius:28,boxShadow:"0 12px 32px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.04)",position:"relative",zIndex:2}},
-        h(SearchRow,{icon:locIconFor(pickup),label:"Получение",value:pd.name,sub:`${pd.subtitle} · ${state.pickupTime}${pickupFee>0?" · +"+fmt(pickupFee,cur):""}`,onClick:()=>onSheet("loc-pickup")}),
-        h("div",{style:{height:0.5,background:T.border,margin:"2px 0"}}),
-        h(SearchRow,{icon:h(I.cal),label:"Даты",value:state.pickupDate&&state.returnDate?`${fmtDayShort(state.pickupDate)} — ${fmtDayShort(state.returnDate)}`:"Выбрать даты",sub:d?d+" дн.":"",onClick:()=>onSheet("date")}),
-        h("div",{style:{height:0.5,background:T.border,margin:"2px 0"}}),
-        h(SearchRow,{icon:locIconFor(ret),label:"Возврат",value:rd.name,sub:`${rd.subtitle} · ${state.returnTime}${returnFee>0?" · +"+fmt(returnFee,cur):""}`,onClick:()=>onSheet("loc-return")}),
-        h("div",{style:{marginTop:12}},
-          h(PrimaryBtn,{onClick:onSearch,disabled:!state.pickupDate||!state.returnDate}, "Найти авто")
+    const popular = [...CARS].sort((a,b)=>a.pricePerDay-b.pricePerDay);
+    const minPrice = popular[0]?.pricePerDay || 0;
+    return h("div",{style:{background:T.bg,minHeight:"100%",paddingBottom:sbPlus(20)}},
+      // ───── Top bar (тонкая линия с brand-pill + currency, не часть hero) ─────
+      h("div",{style:{position:"absolute",top:0,left:0,right:0,zIndex:5,padding:`${stPlus(8)} 14px 0`,display:"flex",alignItems:"center",gap:10}},
+        h(Pressable,{onClick:()=>{tap(10); onAbout&&onAbout();},style:{display:"flex",alignItems:"center",gap:8,padding:"5px 12px 5px 5px",borderRadius:999,background:"rgba(255,255,255,0.20)",backdropFilter:"saturate(180%) blur(20px)",WebkitBackdropFilter:"saturate(180%) blur(20px)"}},
+          h("span",{style:{width:30,height:30,borderRadius:"50%",background:"#fff",color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,letterSpacing:-0.3,flexShrink:0}}, BRAND.short),
+          h("span",{style:{color:"#fff",fontSize:13,fontWeight:600,maxWidth:130,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, BRAND.name)
+        ),
+        h("div",{style:{flex:1}}),
+        h("div",{style:{display:"flex",padding:3,borderRadius:999,background:"rgba(255,255,255,0.20)",backdropFilter:"saturate(180%) blur(20px)",WebkitBackdropFilter:"saturate(180%) blur(20px)"}},
+          [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k);tap(10);},style:{background:cur===k?"#fff":"transparent",color:cur===k?T.primary:"#fff",padding:"6px 12px",borderRadius:999,fontWeight:700,fontSize:11}},l))
         )
       ),
-      h("div",{style:{padding:"12px 16px 24px",display:"grid",gap:10}},
-        h(Trust,{icon:h(I.shield),title:"Можно без депозита",sub:"Выберите уровень защиты"}),
-        h(Trust,{icon:h(I.refund),title:"Бесплатная отмена",sub:"За 48 часов до получения"}),
-        h(Trust,{icon:h(I.chat),title:"Поддержка 24/7",sub:"Чат, телефон, e-mail",onClick:()=>onSheet("support")}),
+      // ───── HERO — гладкий градиент, дышащий вертикальный ритм ─────
+      h("div",{style:{position:"relative",background:`linear-gradient(165deg, ${T.primary} 0%, ${shade(T.primary,-30)} 100%)`,padding:`${stPlus(64)} 20px 80px`,color:"#fff",overflow:"hidden"}},
+        // декоративные круги для глубины
+        h("div",{style:{position:"absolute",top:-60,right:-60,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,0.06)"}}),
+        h("div",{style:{position:"absolute",bottom:-80,left:-40,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}),
+        h("h1",{style:{fontSize:32,fontWeight:800,margin:"0 0 10px",lineHeight:1.05,letterSpacing:-0.6,color:"#fff",position:"relative",zIndex:1}}, "Аренда авто", h("br"), "в Белграде"),
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,fontSize:14,opacity:0.92,position:"relative",zIndex:1,flexWrap:"wrap"}},
+          h("span",{style:{display:"inline-flex",alignItems:"center",gap:4}}, "от ", h("b",{style:{fontWeight:800,fontSize:15}}, fmt(minPrice,cur)), "/день"),
+          h("span",{style:{opacity:0.5}}, "·"),
+          h("span",{style:{display:"inline-flex",alignItems:"center",gap:4}}, "★ "+BRAND.rating),
+          h("span",{style:{opacity:0.5}}, "·"),
+          h("span", null, (BRAND.totalTrips/1000).toFixed(0)+"K+ поездок")
+        )
+      ),
+      // ───── SEARCH CARD — большие пальце-дружественные ряды, нависает над hero ─────
+      h("div",{style:{margin:"-56px 16px 0",padding:8,background:T.bgElev,borderRadius:24,boxShadow:"0 16px 40px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.05)",position:"relative",zIndex:3}},
+        h(SearchRow,{icon:locIconFor(pickup),label:"Получение",value:pd.name,sub:`${pd.subtitle} · ${state.pickupTime}${pickupFee>0?" · +"+fmt(pickupFee,cur):""}`,onClick:()=>onSheet("loc-pickup")}),
+        h("div",{style:{height:0.5,background:T.border,margin:"0 12px"}}),
+        h(SearchRow,{highlight:!datesPicked,icon:h(I.cal),label:"Даты аренды",value:datesPicked?`${fmtDayShort(state.pickupDate)} — ${fmtDayShort(state.returnDate)}`:"Выберите даты",sub:datesPicked?d+" дн.":"Тап, чтобы открыть календарь",onClick:()=>onSheet("date")}),
+        h("div",{style:{height:0.5,background:T.border,margin:"0 12px"}}),
+        h(SearchRow,{icon:locIconFor(ret),label:"Возврат",value:rd.name,sub:`${rd.subtitle} · ${state.returnTime}${returnFee>0?" · +"+fmt(returnFee,cur):""}`,onClick:()=>onSheet("loc-return")}),
+        h("div",{style:{padding:"8px 4px 4px"}},
+          h(PrimaryBtn,{onClick:onSearch,disabled:!datesPicked}, datesPicked ? "Найти авто · "+d+" дн." : "Сначала выберите даты")
+        )
+      ),
+      // ───── POPULAR CARS — крупная карусель ─────
+      h("div",{style:{padding:"22px 0 4px"}},
+        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"space-between",padding:"0 16px 12px"}},
+          h("div",null,
+            h("h2",{style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3,margin:0}}, "Популярные авто"),
+            h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, popular.length+" моделей · доступны сейчас")
+          ),
+          h(Pressable,{onClick:onSearch,style:{fontSize:13,color:T.primary,fontWeight:700,padding:"6px 8px"}}, "Все →")
+        ),
+        h("div",{style:{display:"flex",gap:12,padding:"2px 16px 6px",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}},
+          popular.map((c,i)=>{
+            const cardPerDay = pricePerDayFor(c.pricePerDay, d);
+            const cardDiscounted = datesPicked && cardPerDay < c.pricePerDay;
+            return h(Pressable,{key:c.id,onClick:()=>onPickCar&&onPickCar(c),style:{flexShrink:0,scrollSnapAlign:"start",width:172,background:T.bgElev,border:"1px solid "+T.border,borderRadius:20,padding:12,position:"relative",boxShadow:"0 2px 6px rgba(0,0,0,0.04)"}},
+              i===0 && h("span",{style:{position:"absolute",top:10,right:10,padding:"3px 8px",borderRadius:999,background:T.warning,color:"#fff",fontSize:10,fontWeight:800,letterSpacing:0.4,textTransform:"uppercase",zIndex:2,boxShadow:"0 2px 4px rgba(245,158,11,0.4)"}}, "хит"),
+              cardDiscounted && i>0 && h("span",{style:{position:"absolute",top:10,right:10,padding:"3px 8px",borderRadius:999,background:T.success,color:"#fff",fontSize:10,fontWeight:800,letterSpacing:0.4,zIndex:2,boxShadow:"0 2px 4px rgba(16,185,129,0.3)"}}, "−"+Math.round((1-cardPerDay/c.pricePerDay)*100)+"%"),
+              h("div",{style:{background:T.surface,borderRadius:14,padding:"10px 6px",display:"flex",alignItems:"center",justifyContent:"center",height:88,marginBottom:10}},
+                h("img",{src:carImg(c.color),alt:c.model,style:{maxWidth:"96%",maxHeight:78}})
+              ),
+              h("div",{style:{fontSize:14,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.1}}, c.model),
+              h("div",{style:{fontSize:11,color:T.textMuted,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, c.category+" · "+c.transmission+" · "+c.seats+" мест"),
+              h("div",{style:{display:"flex",alignItems:"baseline",gap:5,marginTop:8,paddingTop:8,borderTop:"0.5px solid "+T.border}},
+                cardDiscounted && h("span",{style:{fontSize:11,color:T.textSubtle,textDecoration:"line-through"}}, fmt(c.pricePerDay,cur)),
+                h("span",{style:{fontSize:17,fontWeight:800,color:T.primary,letterSpacing:-0.3}}, fmt(cardPerDay,cur)),
+                h("span",{style:{fontSize:11,color:T.textMuted,fontWeight:600}}, "/день")
+              )
+            );
+          })
+        )
+      ),
+      // ───── CATEGORIES chips — quick filter shortcut ─────
+      h("div",{style:{padding:"18px 16px 4px"}},
+        h("h2",{style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3,margin:"0 0 12px"}}, "По категориям"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+          [
+            {k:"Хэтчбек", icon:"🚗", count:CARS.filter(c=>c.category==="Хэтчбек").length, sub:"экономия"},
+            {k:"Седан",   icon:"🚘", count:CARS.filter(c=>c.category==="Седан").length, sub:"комфорт"},
+            {k:"Внедорожник", icon:"🚙", count:CARS.filter(c=>c.category==="Внедорожник").length, sub:"для семьи"},
+            {k:"all",     icon:"✨", count:CARS.length, sub:"все модели", label:"Все авто"}
+          ].map(cat=>h(Pressable,{key:cat.k,onClick:onSearch,style:{padding:"14px 14px",background:T.surface,borderRadius:18,display:"flex",alignItems:"center",gap:10,minHeight:64}},
+            h("span",{style:{fontSize:24,flexShrink:0}}, cat.icon),
+            h("div",{style:{flex:1,minWidth:0}},
+              h("div",{style:{fontSize:14,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, cat.label||cat.k),
+              h("div",{style:{fontSize:11,color:T.textMuted,marginTop:2}}, cat.count+" авто · "+cat.sub)
+            )
+          ))
+        )
+      ),
+      // ───── TRUST footer — мягкие гарантии ─────
+      h("div",{style:{padding:"22px 16px 0"}},
+        h("div",{style:{padding:"16px 14px",background:`linear-gradient(135deg, ${T.primaryDim} 0%, ${T.surface} 100%)`,borderRadius:20,display:"grid",gap:12}},
+          [
+            {icon:I.shield, color:T.primary, title:"Без депозита",   sub:"Не замораживаем средства на карте"},
+            {icon:I.refund, color:T.info,    title:"Отмена за 48 ч", sub:"Бесплатно, без вопросов"},
+            {icon:I.chat,   color:T.success, title:"Поддержка 24/7", sub:"Чат, телефон и e-mail",  click:()=>onSheet("support")},
+          ].map((t,i)=>{
+            const inner = h(F,null,
+              h("span",{style:{width:38,height:38,borderRadius:12,background:T.bgElev,color:t.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}, h(t.icon)),
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:14,fontWeight:700,color:T.text,letterSpacing:-0.1}}, t.title),
+                h("div",{style:{fontSize:12,color:T.textMuted,marginTop:1}}, t.sub)
+              ),
+              t.click && h("span",{style:{color:T.textSubtle,flexShrink:0}}, h(I.chev))
+            );
+            return t.click
+              ? h(Pressable,{key:i,onClick:t.click,style:{display:"flex",alignItems:"center",gap:12,width:"100%"}}, inner)
+              : h("div",{key:i,style:{display:"flex",alignItems:"center",gap:12}}, inner);
+          })
+        )
       )
     );
   }
 
-  function SearchRow({icon,label,value,sub,onClick}) {
-    return h(Pressable,{onClick,style:{display:"flex",alignItems:"center",gap:12,padding:"8px 6px",width:"100%",minHeight:56}},
-      h("span",{style:{width:36,height:36,borderRadius:14,background:T.primaryDim,color:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
+  function SearchRow({icon,label,value,sub,onClick,compact,highlight}) {
+    const iconBg = highlight ? T.primary : T.primaryDim;
+    const iconColor = highlight ? "#fff" : T.primary;
+    return h(Pressable,{onClick,style:{display:"flex",alignItems:"center",gap:compact?10:12,padding:compact?"8px 8px":"8px 6px",width:"100%",minHeight:compact?52:56,borderRadius:compact?14:0,background:highlight?T.primaryDim:"transparent"}},
+      h("span",{style:{width:compact?32:36,height:compact?32:36,borderRadius:12,background:iconBg,color:iconColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}, icon),
       h("div",{style:{flex:1,minWidth:0}},
-        h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}, label),
-        h("div",{style:{fontSize:15,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, value),
-        sub && h("div",{style:{fontSize:11,color:T.textSubtle,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, sub)
+        h("div",{style:{fontSize:10,color:highlight?T.primary:T.textMuted,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase"}}, label),
+        h("div",{style:{fontSize:compact?14:15,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, value),
+        sub && h("div",{style:{fontSize:11,color:highlight?T.primary:T.textSubtle,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:highlight?600:400}}, sub)
       ),
-      h("span",{style:{color:T.textSubtle}}, h(I.chev))
+      h("span",{style:{color:highlight?T.primary:T.textSubtle}}, h(I.chev))
     );
   }
 
@@ -481,9 +748,13 @@ function boot(){
   }
 
   function CarCard({car, d, sur, onClick, cur}) {
-    const totalEur = car.pricePerDay * d + sur;
+    const perDay = pricePerDayFor(car.pricePerDay, d);
+    const baseDay = car.pricePerDay;
+    const discounted = d > 1 && perDay < baseDay;
+    const totalEur = perDay * (d||1) + sur;
     return h(Pressable,{onClick,style:{background:T.bgElev,borderRadius:24,border:"0.5px solid "+T.border,padding:14,width:"100%",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-      h("div",{style:{background:T.surface,borderRadius:18,padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"center",minHeight:120}},
+      h("div",{style:{background:T.surface,borderRadius:18,padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"center",minHeight:120,position:"relative"}},
+        discounted && h("span",{style:{position:"absolute",top:8,right:8,padding:"3px 8px",borderRadius:999,background:T.success,color:"#fff",fontSize:10,fontWeight:800,letterSpacing:0.4,boxShadow:"0 2px 4px rgba(16,185,129,0.3)"}}, "−"+Math.round((1-perDay/baseDay)*100)+"%"),
         h("img",{src:carImg(car.color),alt:car.model,style:{maxWidth:"94%",maxHeight:108}})
       ),
       h("div",{style:{marginTop:12,display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8}},
@@ -492,7 +763,10 @@ function boot(){
           h("div",{style:{fontSize:12,color:T.textMuted,marginTop:2}}, car.category)
         ),
         h("div",{style:{textAlign:"right"}},
-          h("div",{style:{fontSize:20,fontWeight:800,color:T.primary}}, fmt(car.pricePerDay,cur)),
+          h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"flex-end",gap:6}},
+            discounted && h("span",{style:{fontSize:13,color:T.textSubtle,textDecoration:"line-through"}}, fmt(baseDay,cur)),
+            h("span",{style:{fontSize:20,fontWeight:800,color:T.primary}}, fmt(perDay,cur))
+          ),
           h("div",{style:{fontSize:11,color:T.textMuted}}, d?`${fmt(totalEur,cur)} всего`:"в день")
         )
       ),
@@ -507,7 +781,9 @@ function boot(){
   function CarDetail({car, state, onBack, onConfirm, cur, setCur}) {
     const d = days(state.pickupDate, state.returnDate);
     const sur = calcSurchargesEur(state);
-    const total = car.pricePerDay * d + sur;
+    const perDay = pricePerDayFor(car.pricePerDay, d);
+    const total = perDay * (d||1) + sur;
+    const activeTier = tierFor(d);
     return h("div",null,
       h(GlassHeader,{title:"",transparent:true,onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
       h("div",{style:{margin:`calc(-1 * (${ST} + 54px)) 0 0`,paddingTop:`calc(${ST} + 54px)`,background:T.surface,paddingBottom:14}},
@@ -528,8 +804,34 @@ function boot(){
           )
         )
       ),
+      // ── СТОИМОСТЬ АРЕНДЫ — все 7 тиров с подсветкой текущего ──
       h("div",{style:{padding:"0 16px"}},
-        h("h2",{style:{fontSize:16,fontWeight:700,margin:"4px 0 10px",color:T.text}}, "Что включено"),
+        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"space-between",margin:"4px 0 10px"}},
+          h("h2",{style:{fontSize:16,fontWeight:700,margin:0,color:T.text}}, "Стоимость аренды"),
+          h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600}}, "чем дольше — тем выгоднее")
+        ),
+        h("div",{style:{display:"flex",gap:8,overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",padding:"2px 0 4px",margin:"0 -16px",paddingLeft:16,paddingRight:16}},
+          PRICE_TIERS.map((t,i)=>{
+            const tierPrice = Math.round(car.pricePerDay * t.mult);
+            const isActive = activeTier && activeTier.minDays === t.minDays;
+            return h("div",{key:i,style:{flexShrink:0,scrollSnapAlign:"start",width:128,padding:"12px 10px",background:isActive?T.primary:T.surface,color:isActive?"#fff":T.text,borderRadius:16,border:isActive?"2px solid "+T.primary:"1px solid "+T.border,boxShadow:isActive?"0 6px 16px rgba(255,31,143,0.25)":"none",position:"relative"}},
+              h("div",{style:{display:"flex",alignItems:"center",gap:5,marginBottom:8}},
+                h("span",{style:{color:isActive?"#fff":T.primary,display:"flex"}}, h(I.cal)),
+                h("span",{style:{fontSize:11,fontWeight:700,color:isActive?"#fff":T.primary,letterSpacing:-0.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, t.label)
+              ),
+              h("div",{style:{fontSize:9,fontWeight:700,color:isActive?"rgba(255,255,255,0.75)":T.textMuted,letterSpacing:0.4,textTransform:"uppercase"}}, "от"),
+              h("div",{style:{display:"flex",alignItems:"baseline",gap:3,marginTop:2}},
+                h("span",{style:{fontSize:22,fontWeight:800,letterSpacing:-0.5,color:isActive?"#fff":T.text}}, tierPrice),
+                h("span",{style:{fontSize:11,fontWeight:600,color:isActive?"rgba(255,255,255,0.85)":T.textMuted}}, cur==="EUR"?"€":"дин")
+              ),
+              h("div",{style:{fontSize:10,color:isActive?"rgba(255,255,255,0.85)":T.textMuted,marginTop:2}}, "/день"),
+              isActive && h("div",{style:{fontSize:9,fontWeight:700,marginTop:6,letterSpacing:0.4,textTransform:"uppercase",color:"rgba(255,255,255,0.9)"}}, "Ваш тариф")
+            );
+          })
+        )
+      ),
+      h("div",{style:{padding:"18px 16px 0"}},
+        h("h2",{style:{fontSize:16,fontWeight:700,margin:"0 0 10px",color:T.text}}, "Что включено"),
         [
           ["Пробег "+car.mileage+" км/день", "+"+MILEAGE_OVERAGE_EUR.toFixed(2)+" €/км сверх · можно безлимит за 5 €/день"],
           ["Можно без депозита","Выберите уровень защиты на следующем шаге"],
@@ -548,7 +850,7 @@ function boot(){
       h("div",{style:{height:104}}),
       h("div",{style:{position:"sticky",bottom:0,zIndex:10,background:T.glass,backdropFilter:"saturate(180%) blur(18px)",borderTop:"0.5px solid "+T.border,padding:"12px 16px",paddingBottom:sbPlus(12),display:"flex",alignItems:"center",gap:12}},
         h("div",{style:{flex:1,minWidth:0}},
-          h("div",{style:{fontSize:12,color:T.textMuted}}, `${d} дн. · базовая стоимость`),
+          h("div",{style:{fontSize:12,color:T.textMuted}}, `${fmt(perDay,cur)}/день × ${d} дн.`),
           h("div",{style:{fontSize:22,fontWeight:800,color:T.text}}, fmt(total,cur))
         ),
         h(PrimaryBtn,{onClick:onConfirm,full:false,style:{minWidth:170}}, "Выбрать авто")
@@ -673,7 +975,8 @@ function boot(){
 
   function BookingSummary({car, state, ins, extras, docs, setDocs, contact, setContact, terms, setTerms, onBack, onSubmit, cur, setCur, jumpStep, days:d, onSheet}) {
     const insOpt = INSURANCES.find(i=>i.id===ins);
-    const carCost = car.pricePerDay * d;
+    const perDay = pricePerDayFor(car.pricePerDay, d);
+    const carCost = perDay * d;
     const insCost = insOpt.pricePerDay * d;
     const sur = calcSurchargesEur(state);
     const extrasCost = calcExtrasEur(extras, d);
@@ -786,7 +1089,7 @@ function boot(){
       h("div",{style:{padding:"18px 16px 0"}},
         h("h3",{style:{fontSize:14,fontWeight:700,margin:"0 0 8px",color:T.text}}, "Стоимость"),
         h("div",{style:{padding:"4px 14px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18}},
-          h(Line,{l:`${fmt(car.pricePerDay,cur)} × ${d} дн.`,v:fmt(carCost,cur)}),
+          h(Line,{l:`${fmt(perDay,cur)} × ${d} дн.${perDay<car.pricePerDay?" (тариф −"+Math.round((1-perDay/car.pricePerDay)*100)+"%)":""}`,v:fmt(carCost,cur)}),
           !insOpt.isIncluded && h(Line,{l:"Защита",v:fmt(insCost,cur)}),
           extrasCost>0 && h(Line,{l:"Услуги ("+cnt+")",v:fmt(extrasCost,cur)}),
           pickup.priceEur > 0 && h(Line,{l:"Получение в "+(pickup.type==="airport"?"аэропорту":"месте"),v:"+"+fmt(pickup.priceEur,cur)}),
@@ -980,6 +1283,8 @@ function boot(){
   }
 
   function App() {
+    // Старт всегда с Home (Aviasales-style).
+    // Welcome (визитка) теперь доступен только через brand-pill в hero.
     const [view, setView] = useState("home");
     const [sheet, setSheet] = useState(null);
     const [car, setCar] = useState(null);
@@ -990,17 +1295,29 @@ function boot(){
     const [contact, setContact] = useState({kind:"person",firstName:"",lastName:"",email:"",phone:"",companyPib:""});
     const [terms, setTerms] = useState(false);
     const [s, setS] = useState({
-      pickupLoc:"airport-bg", pickupDate:todayPlus(2), pickupTime:"10:00",
-      returnLoc:"airport-bg", returnDate:todayPlus(5), returnTime:"10:00",
+      pickupLoc:"airport-bg", pickupDate:null, pickupTime:"10:00",
+      returnLoc:"airport-bg", returnDate:null, returnTime:"10:00",
     });
+    // Если юзер тапнул "popular" авто без выбранных дат — после подтверждения дат уведём в detail
+    const [afterDateGo, setAfterDateGo] = useState(null);
 
     const insOpt = INSURANCES.find(i=>i.id===ins);
     const d = days(s.pickupDate,s.returnDate);
     const total = useMemo(()=>{
       if(!car) return 0;
       const sur = calcSurchargesEur(s);
-      return car.pricePerDay*d + insOpt.pricePerDay*d + calcExtrasEur(extras,d) + sur + SERVICE_FEE_EUR;
+      const carPerDay = pricePerDayFor(car.pricePerDay, d);
+      return carPerDay*d + insOpt.pricePerDay*d + calcExtrasEur(extras,d) + sur + SERVICE_FEE_EUR;
     },[car,s,insOpt,extras,d]);
+
+    const startApp = ()=>{ setView("home"); tap(10); };
+    const openAbout = ()=>{ setView("welcome"); tap(8); };
+    const pickPopular = (c)=>{
+      setCar(c);
+      // Нет дат — сначала отправим юзера выбрать даты, потом покажем детали
+      if (!s.pickupDate || !s.returnDate) { setAfterDateGo("detail"); setSheet("date"); }
+      else { setView("detail"); tap(10); }
+    };
 
     const submit = ()=>{ tap(20); setView("success"); window.scrollTo&&window.scrollTo(0,0); };
     const done = ()=>{
@@ -1014,7 +1331,8 @@ function boot(){
     useEffect(()=>{ if(scroller) scroller.scrollTop = 0; },[view]);
 
     return h("div",{style:{minHeight:"100%",background:T.bg,color:T.text,fontFamily:"inherit",position:"relative"}},
-      view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur}),
+      view==="welcome" && h(Welcome,{onStart:startApp,onBack:()=>{setView("home"); tap(8);},onSheet:setSheet}),
+      view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur,onAbout:openAbout,onPickCar:pickPopular}),
       view==="catalog" && h(Catalog,{state:s,onBack:()=>setView("home"),onSelect:(c)=>{setCar(c); setView("detail"); tap(8);},onEdit:()=>setView("home"),cur,setCur}),
       view==="detail" && car && h(CarDetail,{car,state:s,onBack:()=>setView("catalog"),onConfirm:()=>{setView("insurance"); tap(10);},cur,setCur}),
       view==="insurance" && car && h(InsuranceStep,{state:s,ins,setIns,onBack:()=>setView("detail"),onNext:()=>{setView("extras"); tap(10);},cur,setCur,days:d}),
@@ -1022,7 +1340,11 @@ function boot(){
       view==="summary" && car && h(BookingSummary,{car,state:s,ins,extras,docs,setDocs,contact,setContact,terms,setTerms,onBack:()=>setView("extras"),onSubmit:submit,cur,setCur,jumpStep,days:d,onSheet:setSheet}),
       view==="success" && car && h(Success,{car,total,days:d,state:s,contact,cur,onDone:done}),
 
-      h(DateSheet,{open:sheet==="date",onClose:()=>setSheet(null),value:{start:s.pickupDate,end:s.returnDate},onConfirm:(v)=>{setS({...s,pickupDate:v.start,returnDate:v.end});setSheet(null);}}),
+      h(DateSheet,{open:sheet==="date",onClose:()=>{setSheet(null); setAfterDateGo(null);},value:{start:s.pickupDate,end:s.returnDate},onConfirm:(v)=>{
+        setS({...s,pickupDate:v.start,returnDate:v.end});
+        setSheet(null);
+        if (afterDateGo) { setView(afterDateGo); setAfterDateGo(null); tap(10); }
+      }}),
       h(LocSheet,{open:sheet==="loc-pickup",onClose:()=>setSheet(null),valueLoc:s.pickupLoc,valueTime:s.pickupTime,onConfirm:(v)=>{setS({...s,pickupLoc:v.loc,pickupTime:v.time});setSheet(null);},title:"Где забрать?",timeLabel:"Время получения",cur,context:"pickup"}),
       h(LocSheet,{open:sheet==="loc-return",onClose:()=>setSheet(null),valueLoc:s.returnLoc,valueTime:s.returnTime,onConfirm:(v)=>{setS({...s,returnLoc:v.loc,returnTime:v.time});setSheet(null);},title:"Куда вернуть?",timeLabel:"Время возврата",cur,context:"return"}),
       h(SupportSheet,{open:sheet==="support",onClose:()=>setSheet(null)}),
