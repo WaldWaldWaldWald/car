@@ -129,13 +129,14 @@ function boot(){
   function carImg(color) { const c2 = shade(color,-25); return "data:image/svg+xml;utf8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 110"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><ellipse cx="120" cy="98" rx="105" ry="6" fill="rgba(20,22,30,0.08)"/><path d="M30 78 Q35 50 70 45 L110 35 Q140 28 170 38 L195 50 Q215 55 220 75 L220 86 Q220 92 213 92 L196 92 A14 14 0 0 0 168 92 L86 92 A14 14 0 0 0 58 92 L37 92 Q30 92 30 86 Z" fill="url(#g)"/><path d="M82 47 L106 41 L106 60 L78 60 Q78 50 82 47 Z" fill="#E8F0FF" opacity=".9"/><path d="M112 40 L160 42 Q170 48 174 60 L112 60 Z" fill="#E8F0FF" opacity=".9"/><circle cx="72" cy="92" r="13" fill="#1a1a1a"/><circle cx="72" cy="92" r="6" fill="#555"/><circle cx="182" cy="92" r="13" fill="#1a1a1a"/><circle cx="182" cy="92" r="6" fill="#555"/></svg>`); }
 
   const CARS = [
-    { id:"skoda-kamiq", model:"Skoda Kamiq", category:"Внедорожник", transmission:"АКП", fuel:"Бензин", seats:5, pricePerDay:35, color:"#1B6AF0", mileage:200 },
-    { id:"vw-polo", model:"Volkswagen Polo", category:"Хэтчбек", transmission:"МКП", fuel:"Бензин", seats:5, pricePerDay:25, color:"#2B2F36", mileage:200 },
-    { id:"hyundai-tucson", model:"Hyundai Tucson", category:"Внедорожник", transmission:"АКП", fuel:"Дизель", seats:5, pricePerDay:55, color:"#7B8290", mileage:200 },
-    { id:"toyota-corolla", model:"Toyota Corolla", category:"Седан", transmission:"АКП", fuel:"Гибрид", seats:5, pricePerDay:32, color:"#0E7C66", mileage:200 },
-    { id:"tesla-3", model:"Tesla Model 3", category:"Седан", transmission:"АКП", fuel:"Электро", seats:5, pricePerDay:65, color:"#0A0B0F", mileage:250 },
+    { id:"skoda-kamiq",    model:"Skoda Kamiq",          category:"Кроссовер", transmission:"АКП", fuel:"Бензин",  seats:5, pricePerDay:35, color:"#1B6AF0", mileage:200 },
+    { id:"vw-polo",        model:"Volkswagen Polo",      category:"Хэтчбек",   transmission:"МКП", fuel:"Бензин",  seats:5, pricePerDay:25, color:"#2B2F36", mileage:200 },
+    { id:"hyundai-tucson", model:"Hyundai Tucson",       category:"Кроссовер", transmission:"АКП", fuel:"Дизель",  seats:5, pricePerDay:55, color:"#7B8290", mileage:200 },
+    { id:"toyota-corolla", model:"Toyota Corolla",       category:"Седан",     transmission:"АКП", fuel:"Гибрид",  seats:5, pricePerDay:32, color:"#0E7C66", mileage:200 },
+    { id:"tesla-3",        model:"Tesla Model 3",        category:"Седан",     transmission:"АКП", fuel:"Электро", seats:5, pricePerDay:65, color:"#0A0B0F", mileage:250 },
+    { id:"vw-caravelle",   model:"Volkswagen Caravelle", category:"Минивен",   transmission:"АКП", fuel:"Дизель",  seats:8, pricePerDay:75, color:"#3B5998", mileage:200 },
   ];
-  const CATEGORIES = [["all","Все"],["Хэтчбек","Хэтчбек"],["Седан","Седан"],["Внедорожник","Внедорожник"]];
+  const CATEGORIES = [["all","Все"],["Хэтчбек","Хэтчбек"],["Седан","Седан"],["Кроссовер","Кроссовер"],["Минивен","Минивен"]];
   const MILEAGE_OVERAGE_EUR = 0.30; // €/км сверх лимита
 
   // ════════════════════════════════════════════════════════════════════
@@ -215,6 +216,24 @@ function boot(){
   }
 
   function todayPlus(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+  function addDays(iso, n){ if(!iso) return null; const d=new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+  // Минимальный лаг для подачи авто. Стандарт у проката — 1.5–2 часа на подготовку
+  // (мойка, проверка топлива, подготовка договора). Используем 2 часа.
+  const MIN_PICKUP_BUFFER_H = 2;
+  // Возвращает минимально допустимое время выдачи для указанной даты как "HH:MM",
+  // округлённое вверх до ближайших 30 минут. null если в этот день уже невозможно.
+  function earliestTimeFor(iso) {
+    if (!iso) return "06:00";
+    if (iso !== todayISO()) return "06:00";
+    const dt = new Date(Date.now() + MIN_PICKUP_BUFFER_H * 3600 * 1000);
+    let hh = dt.getHours(), mm = dt.getMinutes();
+    if (mm > 30) { hh += 1; mm = 0; }
+    else if (mm > 0) { mm = 30; }
+    if (hh > 22) return null;
+    if (hh < 6) { hh = 6; mm = 0; }
+    return String(hh).padStart(2,"0")+":"+String(mm).padStart(2,"0");
+  }
   function fmtDay(iso){ if(!iso) return "—"; const [y,m,d]=iso.split("-"); const M=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]; const W=["вс","пн","вт","ср","чт","пт","сб"]; const dt=new Date(iso); return `${parseInt(d,10)} ${M[parseInt(m,10)-1]}, ${W[dt.getDay()]}`; }
   function fmtDayShort(iso){ if(!iso) return "—"; const [y,m,d]=iso.split("-"); const M=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]; return `${parseInt(d,10)} ${M[parseInt(m,10)-1]}`; }
   function days(a,b){ if(!a||!b) return 0; const ms=new Date(b)-new Date(a); if(ms<=0) return 0; return Math.max(1,Math.ceil(ms/86400000)); }
@@ -300,15 +319,12 @@ function boot(){
     );
   }
 
-  function CurrencyToggle({cur, setCur, onLight}) {
-    return h("div",{style:{position:"absolute", top: stPlus(8), right:16, zIndex:5,display:"flex", padding:3, borderRadius:999,background: onLight?"rgba(255,255,255,0.20)":T.surface,backdropFilter:"blur(10px)"}},
-      [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k); tap(10);},style:{background: cur===k ? "#fff" : "transparent",color: cur===k ? T.primary : (onLight?"#fff":T.text),padding:"6px 12px", borderRadius:999,fontWeight:600, fontSize:12}}, l))
-    );
-  }
-
-  function CurrencyTogglePill({cur,setCur}) {
-    return h("div",{style:{display:"flex",padding:3,borderRadius:999,background:T.surface,marginRight:4}},
-      [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k); tap(10);},style:{background: cur===k ? T.text : "transparent",color: cur===k ? T.bg : T.textMuted,padding:"5px 10px", borderRadius:999,fontWeight:600, fontSize:12}}, l))
+  // ── LangPill — тап открывает LangSheet. На месте бывшего currency-toggle ──
+  function LangPill({appLang, onOpen, onLight}) {
+    const cur = ONB_LANGS.find(L=>L.code===appLang) || ONB_LANGS[0];
+    return h(Pressable,{onClick:()=>{tap(8); onOpen&&onOpen();},style:{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:999,background:onLight?"rgba(255,255,255,0.20)":T.surface,backdropFilter:onLight?"saturate(180%) blur(20px)":"none",WebkitBackdropFilter:onLight?"saturate(180%) blur(20px)":"none"}},
+      h("span",{style:{fontSize:18,lineHeight:1,flexShrink:0}}, cur.flag),
+      h("span",{style:{color:onLight?"#fff":T.text,fontSize:11,fontWeight:700,letterSpacing:0.5}}, cur.code.toUpperCase())
     );
   }
 
@@ -388,12 +404,27 @@ function boot(){
     );
   }
 
-  function LocSheet({open, onClose, valueLoc, valueTime, onConfirm, title, timeLabel, cur, context}) {
+  function LocSheet({open, onClose, valueLoc, valueTime, onConfirm, title, timeLabel, cur, context, forDate}) {
     const [loc, setLoc] = useState(valueLoc);
     const [time, setTime] = useState(valueTime);
-    useEffect(()=>{ if(open){ setLoc(valueLoc); setTime(valueTime); } },[open]);
+    const earliest = earliestTimeFor(forDate);
+    useEffect(()=>{
+      if(open){
+        setLoc(valueLoc);
+        // Если сохранённое время уже невалидно для даты — авто-сдвиг на ближайшее
+        const initT = (earliest && valueTime < earliest) ? earliest : valueTime;
+        setTime(initT);
+      }
+    },[open, valueTime, valueLoc, earliest]);
     const off = isOffHours(time);
-    const hours = []; for (let h2=6; h2<=22; h2++) for (let m=0; m<60; m+=30) hours.push(`${String(h2).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+    const hours = [];
+    if (earliest) {
+      for (let h2=6; h2<=22; h2++) for (let m=0; m<60; m+=30) {
+        const tStr = String(h2).padStart(2,"0")+":"+String(m).padStart(2,"0");
+        if (tStr >= earliest) hours.push(tStr);
+      }
+    }
+    const noSlots = hours.length === 0;
     return h(BottomSheet,{open,onClose,title,height:"auto"},
       h("div",{style:{fontSize:11,color:T.textMuted,textTransform:"uppercase",letterSpacing:0.5,fontWeight:600,padding:"4px 4px 8px"}}, "Место"),
       h("div",{style:{display:"grid",gap:8}},
@@ -407,8 +438,16 @@ function boot(){
       h("div",{style:{fontSize:11,color: off?T.warning:T.textMuted,marginTop:6,padding:"0 4px",fontWeight:off?600:400}},
         off ? "⚠ Вне 09:00–18:00 · надбавка "+fmtSurcharge("offHours",cur) : "Бесплатно с 09:00 до 18:00"
       ),
+      forDate===todayISO() && !noSlots && h("div",{style:{marginTop:8,padding:"10px 12px",background:T.infoDim,borderRadius:12,fontSize:12,color:T.text,lineHeight:1.45,display:"flex",alignItems:"flex-start",gap:8}},
+        h("span",{style:{fontSize:14,flexShrink:0}}, "ℹ️"),
+        h("span",null, "На подготовку авто нужно ~"+MIN_PICKUP_BUFFER_H+" часа. Самое раннее на сегодня — ", h("b",null,earliest)+".")
+      ),
+      noSlots && h("div",{style:{marginTop:8,padding:"12px 14px",background:T.warningDim,border:"1px solid "+T.warning,borderRadius:12,fontSize:12,color:T.text,lineHeight:1.45}},
+        h("div",{style:{fontWeight:700,marginBottom:2}}, "На сегодня уже поздно"),
+        "Подача авто занимает ~"+MIN_PICKUP_BUFFER_H+" часа. Выберите завтра или позже."
+      ),
       h("div",{style:{marginTop:18}},
-        h(PrimaryBtn,{onClick:()=>onConfirm({loc,time})}, "Применить")
+        h(PrimaryBtn,{onClick:()=>onConfirm({loc,time}), disabled: noSlots}, "Применить")
       )
     );
   }
@@ -434,7 +473,7 @@ function boot(){
   function locIconFor(loc) { if (!loc) return h(I.cal); if (loc.type==="airport") return h(I.plane); if (loc.type==="delivery") return h(I.truck); return h(I.home); }
 
   // ── Welcome / About — карточка-визитка с фиксированной структурой ──
-  function Welcome({onStart, onBack, onSheet}) {
+  function Welcome({onStart, onBack, onSheet, appLang}) {
     const benefitIcons = {shield:I.shield, bolt:I.bolt, chat:I.chat, refund:I.refund};
     return h("div", {style:{minHeight:"100%",background:T.surface,paddingBottom:sbPlus(80)}},
       // ──── HERO ────
@@ -520,6 +559,18 @@ function boot(){
           ))
         )
       ),
+      // ──── ЯЗЫК — переключатель ────
+      h("div", {style:{padding:"0 16px 12px"}},
+        h("h2", {style:{fontSize:13,fontWeight:700,color:T.textMuted,letterSpacing:0.4,textTransform:"uppercase",margin:"0 0 8px",padding:"0 4px"}}, "Настройки"),
+        h(Pressable, {onClick:()=>onSheet&&onSheet("lang"), style:{padding:"14px 16px",background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,display:"flex",alignItems:"center",gap:12,width:"100%"}},
+          h("span", {style:{fontSize:24,flexShrink:0,lineHeight:1}}, (ONB_LANGS.find(L=>L.code===appLang)||ONB_LANGS[0]).flag),
+          h("div", {style:{flex:1,minWidth:0,textAlign:"left"}},
+            h("div", {style:{fontSize:14,fontWeight:700,color:T.text}}, "Язык приложения"),
+            h("div", {style:{fontSize:12,color:T.textMuted,marginTop:2}}, (ONB_LANGS.find(L=>L.code===appLang)||ONB_LANGS[0]).label)
+          ),
+          h("span", {style:{color:T.textSubtle}}, h(I.chev))
+        )
+      ),
       // ──── CONTACT — единый primary-блок ────
       h("div", {style:{padding:"0 16px 16px"}},
         h(Pressable, {onClick:()=>onSheet&&onSheet("support"), style:{padding:"14px 16px",background:T.primary,borderRadius:18,display:"flex",alignItems:"center",gap:12,width:"100%"}},
@@ -546,7 +597,7 @@ function boot(){
     );
   }
 
-  function Home({state, onSheet, onSearch, cur, setCur, onAbout, onPickCar}) {
+  function Home({state, onSheet, onSearch, cur, setCur, onAbout, onPickCar, appLang, onLangOpen}) {
     const pickup = LOCATIONS.find(l=>l.id===state.pickupLoc);
     const ret = LOCATIONS.find(l=>l.id===state.returnLoc);
     const datesPicked = !!(state.pickupDate && state.returnDate);
@@ -567,9 +618,7 @@ function boot(){
           h("span",{style:{color:"#fff",fontSize:13,fontWeight:600,maxWidth:130,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, BRAND.name)
         ),
         h("div",{style:{flex:1}}),
-        h("div",{style:{display:"flex",padding:3,borderRadius:999,background:"rgba(255,255,255,0.20)",backdropFilter:"saturate(180%) blur(20px)",WebkitBackdropFilter:"saturate(180%) blur(20px)"}},
-          [["EUR","€"],["RSD","дин"]].map(([k,l])=>h(Pressable,{key:k,onClick:()=>{setCur(k);tap(10);},style:{background:cur===k?"#fff":"transparent",color:cur===k?T.primary:"#fff",padding:"6px 12px",borderRadius:999,fontWeight:700,fontSize:11}},l))
-        )
+        h(LangPill,{appLang,onOpen:onLangOpen,onLight:true})
       ),
       // ───── HERO — гладкий градиент, дышащий вертикальный ритм ─────
       h("div",{style:{position:"relative",background:`linear-gradient(165deg, ${T.primary} 0%, ${shade(T.primary,-30)} 100%)`,padding:`${stPlus(64)} 20px 80px`,color:"#fff",overflow:"hidden"}},
@@ -631,17 +680,20 @@ function boot(){
         h("h2",{style:{fontSize:18,fontWeight:800,color:T.text,letterSpacing:-0.3,margin:"0 0 12px"}}, "По категориям"),
         h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
           [
-            {k:"Хэтчбек", icon:"🚗", count:CARS.filter(c=>c.category==="Хэтчбек").length, sub:"экономия"},
-            {k:"Седан",   icon:"🚘", count:CARS.filter(c=>c.category==="Седан").length, sub:"комфорт"},
-            {k:"Внедорожник", icon:"🚙", count:CARS.filter(c=>c.category==="Внедорожник").length, sub:"для семьи"},
-            {k:"all",     icon:"✨", count:CARS.length, sub:"все модели", label:"Все авто"}
-          ].map(cat=>h(Pressable,{key:cat.k,onClick:onSearch,style:{padding:"14px 14px",background:T.surface,borderRadius:18,display:"flex",alignItems:"center",gap:10,minHeight:64}},
-            h("span",{style:{fontSize:24,flexShrink:0}}, cat.icon),
-            h("div",{style:{flex:1,minWidth:0}},
-              h("div",{style:{fontSize:14,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, cat.label||cat.k),
-              h("div",{style:{fontSize:11,color:T.textMuted,marginTop:2}}, cat.count+" авто · "+cat.sub)
-            )
-          ))
+            {k:"Хэтчбек",   icon:"🚗", sub:"экономия"},
+            {k:"Седан",     icon:"🚘", sub:"комфорт"},
+            {k:"Кроссовер", icon:"🚙", sub:"универсал"},
+            {k:"Минивен",   icon:"🚐", sub:"для группы"},
+          ].map(cat=>{
+            const cnt = CARS.filter(c=>c.category===cat.k).length;
+            return h(Pressable,{key:cat.k,onClick:onSearch,style:{padding:"14px 14px",background:T.surface,borderRadius:18,display:"flex",alignItems:"center",gap:10,minHeight:64,opacity:cnt?1:0.55}},
+              h("span",{style:{fontSize:24,flexShrink:0}}, cat.icon),
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:14,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, cat.k),
+                h("div",{style:{fontSize:11,color:T.textMuted,marginTop:2}}, cnt+" авто · "+cat.sub)
+              )
+            );
+          })
         )
       ),
       // ───── TRUST footer — мягкие гарантии ─────
@@ -721,6 +773,26 @@ function boot(){
     );
   }
 
+  // ── LangSheet — переключатель языка из Welcome ──
+  function LangSheet({open, onClose, lang, setLang}) {
+    return h(BottomSheet,{open,onClose,title:"Язык приложения",height:"auto"},
+      h("div",{style:{fontSize:12,color:T.textMuted,marginBottom:12,lineHeight:1.5}}, "Выберите язык. Изменение применится к новым экранам и при следующем запуске."),
+      h("div",{style:{display:"grid",gap:8}},
+        ONB_LANGS.map(L=>{
+          const active = lang===L.code;
+          return h(Pressable,{key:L.code,onClick:()=>{setLang(L.code); tap(10); try{const p=JSON.parse(localStorage.getItem("rc-prefs")||"{}"); p.lang=L.code; localStorage.setItem("rc-prefs",JSON.stringify(p));}catch(e){}; setTimeout(onClose, 250);},style:{padding:"14px 16px",borderRadius:16,background:active?T.primary:T.surface,color:active?"#fff":T.text,border:"2px solid "+(active?T.primary:"transparent"),display:"flex",alignItems:"center",gap:14,width:"100%",transition:"background 0.2s ease"}},
+            h("span",{style:{fontSize:28,flexShrink:0,lineHeight:1}}, L.flag),
+            h("div",{style:{flex:1,minWidth:0,textAlign:"left"}},
+              h("div",{style:{fontSize:16,fontWeight:700,letterSpacing:-0.2}}, L.label),
+              h("div",{style:{fontSize:12,opacity:active?0.9:0.6,marginTop:2,fontWeight:500}}, L.greeting+" 👋")
+            ),
+            h("span",{style:{width:24,height:24,borderRadius:"50%",background:active?"rgba(255,255,255,0.28)":"transparent",border:"1.5px solid "+(active?"transparent":T.border),display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:active?"#fff":"transparent"}}, "✓")
+          );
+        })
+      )
+    );
+  }
+
   // ── DocsSheet / TermsSheet — открываются по гиперссылкам ──
   function InfoSheet({open, onClose, title, body}) {
     return h(BottomSheet,{open,onClose,title,height:"auto"},
@@ -731,7 +803,7 @@ function boot(){
     );
   }
 
-  function Catalog({state, onBack, onSelect, onEdit, cur, setCur}) {
+  function Catalog({state, onBack, onSelect, onEdit, cur, setCur, appLang, onLangOpen}) {
     const [cat, setCat] = useState("all");
     const d = days(state.pickupDate, state.returnDate);
     const sur = calcSurchargesEur(state);
@@ -740,7 +812,7 @@ function boot(){
     const pd = locDisplay(pickup, "pickup");
     const summaryShort = pickup?.code || (pickup?.type==="delivery"?"Доставка":pd.name.split(" ")[0]);
     return h("div",null,
-      h(GlassHeader,{title:"Доступные авто",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(GlassHeader,{title:"Доступные авто",onBack,right:h(LangPill,{appLang,onOpen:onLangOpen})}),
       h(Pressable,{onClick:onEdit,style:{display:"flex",alignItems:"center",gap:10,margin:"8px 16px 12px",padding:"10px 14px",background:T.surface,borderRadius:18,width:"calc(100% - 32px)"}},
         h("span",{style:{color:T.primary}}, h(I.cal)),
         h("div",{style:{flex:1,minWidth:0}},
@@ -791,7 +863,7 @@ function boot(){
     );
   }
 
-  function CarDetail({car, state, onBack, onConfirm, cur, setCur}) {
+  function CarDetail({car, state, onBack, onConfirm, cur, setCur, onTierTap, appLang, onLangOpen}) {
     const d = days(state.pickupDate, state.returnDate);
     const sur = calcSurchargesEur(state);
     const perDay = pricePerDayFor(car.pricePerDay, d);
@@ -813,7 +885,7 @@ function boot(){
       requestAnimationFrame(()=>requestAnimationFrame(center));
     }, [activeIdx]);
     return h("div",null,
-      h(GlassHeader,{title:"",transparent:true,onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(GlassHeader,{title:"",transparent:true,onBack,right:h(LangPill,{appLang,onOpen:onLangOpen})}),
       h("div",{style:{margin:`calc(-1 * (${ST} + 54px)) 0 0`,paddingTop:`calc(${ST} + 54px)`,background:T.surface,paddingBottom:14}},
         h("div",{style:{height:200,display:"flex",alignItems:"center",justifyContent:"center"}},
           h("img",{src:carImg(car.color),alt:car.model,style:{maxWidth:"82%",maxHeight:"82%"}})
@@ -832,20 +904,21 @@ function boot(){
           )
         )
       ),
-      // ── СТОИМОСТЬ АРЕНДЫ — все 7 тиров с подсветкой текущего ──
+      // ── СТОИМОСТЬ АРЕНДЫ — все 7 тиров с подсветкой текущего, тап = подгонка дат ──
       h("div",{style:{padding:"0 16px"}},
-        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"space-between",margin:"4px 0 10px"}},
+        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"space-between",margin:"4px 0 4px"}},
           h("h2",{style:{fontSize:16,fontWeight:700,margin:0,color:T.text}}, "Стоимость аренды"),
           h("div",{style:{fontSize:11,color:T.textMuted,fontWeight:600}}, "чем дольше — тем выгоднее")
         ),
+        h("div",{style:{fontSize:11,color:T.textSubtle,marginBottom:8}}, "Нажмите на тариф, чтобы подогнать даты"),
         h("div",{ref:tiersRef,style:{display:"flex",gap:8,overflowX:"auto",scrollSnapType:"x proximity",WebkitOverflowScrolling:"touch",padding:"2px 0 4px",margin:"0 -16px",paddingLeft:16,paddingRight:16}},
-          PRICE_TIERS.map((t,i)=>{
-            const tierPrice = Math.round(car.pricePerDay * t.mult);
-            const isActive = activeTier && activeTier.minDays === t.minDays;
-            return h("div",{key:i,style:{flexShrink:0,scrollSnapAlign:"center",width:128,padding:"12px 10px",background:isActive?T.primary:T.surface,color:isActive?"#fff":T.text,borderRadius:16,border:isActive?"2px solid "+T.primary:"1px solid "+T.border,boxShadow:isActive?"0 6px 16px rgba(255,31,143,0.25)":"none",position:"relative"}},
+          PRICE_TIERS.map((tier,i)=>{
+            const tierPrice = Math.round(car.pricePerDay * tier.mult);
+            const isActive = activeTier && activeTier.minDays === tier.minDays;
+            return h(Pressable,{key:i,onClick:()=>onTierTap&&onTierTap(tier),style:{flexShrink:0,scrollSnapAlign:"center",width:128,padding:"12px 10px",background:isActive?T.primary:T.surface,color:isActive?"#fff":T.text,borderRadius:16,border:isActive?"2px solid "+T.primary:"1px solid "+T.border,boxShadow:isActive?"0 6px 16px rgba(255,31,143,0.25)":"none",position:"relative"}},
               h("div",{style:{display:"flex",alignItems:"center",gap:5,marginBottom:8}},
                 h("span",{style:{color:isActive?"#fff":T.primary,display:"flex"}}, h(I.cal)),
-                h("span",{style:{fontSize:11,fontWeight:700,color:isActive?"#fff":T.primary,letterSpacing:-0.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, t.label)
+                h("span",{style:{fontSize:11,fontWeight:700,color:isActive?"#fff":T.primary,letterSpacing:-0.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, tier.label)
               ),
               h("div",{style:{fontSize:9,fontWeight:700,color:isActive?"rgba(255,255,255,0.75)":T.textMuted,letterSpacing:0.4,textTransform:"uppercase"}}, "от"),
               h("div",{style:{display:"flex",alignItems:"baseline",gap:3,marginTop:2}},
@@ -886,9 +959,9 @@ function boot(){
     );
   }
 
-  function InsuranceStep({state, ins, setIns, onBack, onNext, cur, setCur, days:d}) {
+  function InsuranceStep({state, ins, setIns, onBack, onNext, cur, setCur, days:d, appLang, onLangOpen}) {
     return h("div",null,
-      h(GlassHeader,{title:"Защита",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(GlassHeader,{title:"Защита",onBack,right:h(LangPill,{appLang,onOpen:onLangOpen})}),
       h(StepBar,{step:0}),
       h("div",{style:{padding:"4px 16px 16px",fontSize:13,color:T.textMuted,lineHeight:1.45}}, "Какой риск вы готовы взять и какой депозит замораживается на карте."),
       h("div",{style:{padding:"0 16px 24px",display:"grid",gap:12}},
@@ -946,7 +1019,7 @@ function boot(){
     );
   }
 
-  function ExtrasStep({state, extras, setExtras, onBack, onNext, cur, setCur, days:d}) {
+  function ExtrasStep({state, extras, setExtras, onBack, onNext, cur, setCur, days:d, appLang, onLangOpen}) {
     const groups = {}; EXTRAS.forEach(e=>{ (groups[e.group]||=[]).push(e); });
     const cnt = countExtras(extras);
     const total = calcExtrasEur(extras, d);
@@ -954,7 +1027,7 @@ function boot(){
     const dec = (id)=>{ const cur = extras[id]||0; const next = Math.max(0, cur-1); const e = {...extras}; if (next===0) delete e[id]; else e[id]=next; setExtras(e); tap(8); };
     const tog = (id)=>{ const cur = extras[id]||0; if (cur) dec(id); else inc(id); };
     return h("div",null,
-      h(GlassHeader,{title:"Дополнительные услуги",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(GlassHeader,{title:"Дополнительные услуги",onBack,right:h(LangPill,{appLang,onOpen:onLangOpen})}),
       h(StepBar,{step:1,onJump:(s)=>s===0&&onBack()}),
       d>=8 && h("div",{style:{margin:"4px 16px 14px",padding:"10px 14px",background:T.primaryDim,color:T.primary,borderRadius:14,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:8}},
         h(I.bolt), "При аренде от 8 дней — оплата только за 7"
@@ -1001,7 +1074,7 @@ function boot(){
     );
   }
 
-  function BookingSummary({car, state, ins, extras, docs, setDocs, contact, setContact, terms, setTerms, onBack, onSubmit, cur, setCur, jumpStep, days:d, onSheet}) {
+  function BookingSummary({car, state, ins, extras, docs, setDocs, contact, setContact, terms, setTerms, onBack, onSubmit, cur, setCur, jumpStep, days:d, onSheet, appLang, onLangOpen}) {
     const insOpt = INSURANCES.find(i=>i.id===ins);
     const perDay = pricePerDayFor(car.pricePerDay, d);
     const carCost = perDay * d;
@@ -1033,7 +1106,7 @@ function boot(){
     }
 
     return h("div",null,
-      h(GlassHeader,{title:"Бронирование",onBack,right:h(CurrencyTogglePill,{cur,setCur})}),
+      h(GlassHeader,{title:"Бронирование",onBack,right:h(LangPill,{appLang,onOpen:onLangOpen})}),
       h(StepBar,{step:2,onJump:jumpStep}),
 
       h("div",{style:{margin:"4px 16px 14px",padding:14,background:T.bgElev,border:"1px solid "+T.border,borderRadius:18,display:"flex",alignItems:"center",gap:14}},
@@ -1653,7 +1726,9 @@ function boot(){
     // Первый запуск — показываем Onboarding (5 экранов). Если уже пройден — сразу Home.
     // Welcome (визитка) теперь доступен только через brand-pill в hero.
     const onboarded = (()=>{ try { return localStorage.getItem("rc-onboarded") === "1"; } catch(e) { return false; } })();
+    const savedLang = (()=>{ try { return JSON.parse(localStorage.getItem("rc-prefs")||"{}").lang || "ru"; } catch(e) { return "ru"; } })();
     const [view, setView] = useState(onboarded ? "home" : "onboarding");
+    const [appLang, setAppLang] = useState(savedLang);
     const [sheet, setSheet] = useState(null);
     const [car, setCar] = useState(null);
     const [cur, setCur] = useState("EUR");
@@ -1699,24 +1774,37 @@ function boot(){
     useEffect(()=>{ if(scroller) scroller.scrollTop = 0; },[view]);
 
     return h("div",{style:{minHeight:"100%",background:T.bg,color:T.text,fontFamily:"inherit",position:"relative"}},
-      view==="onboarding" && h(Onboarding,{onDone:()=>{setView("home"); tap(15);}}),
-      view==="welcome" && h(Welcome,{onStart:startApp,onBack:()=>{setView("home"); tap(8);},onSheet:setSheet}),
-      view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur,onAbout:openAbout,onPickCar:pickPopular}),
-      view==="catalog" && h(Catalog,{state:s,onBack:()=>setView("home"),onSelect:(c)=>{setCar(c); setView("detail"); tap(8);},onEdit:()=>setView("home"),cur,setCur}),
-      view==="detail" && car && h(CarDetail,{car,state:s,onBack:()=>setView("catalog"),onConfirm:()=>{setView("insurance"); tap(10);},cur,setCur}),
-      view==="insurance" && car && h(InsuranceStep,{state:s,ins,setIns,onBack:()=>setView("detail"),onNext:()=>{setView("extras"); tap(10);},cur,setCur,days:d}),
-      view==="extras" && car && h(ExtrasStep,{state:s,extras,setExtras,onBack:()=>setView("insurance"),onNext:()=>{setView("summary"); tap(10);},cur,setCur,days:d}),
-      view==="summary" && car && h(BookingSummary,{car,state:s,ins,extras,docs,setDocs,contact,setContact,terms,setTerms,onBack:()=>setView("extras"),onSubmit:submit,cur,setCur,jumpStep,days:d,onSheet:setSheet}),
+      view==="onboarding" && h(Onboarding,{onDone:(prefs)=>{if(prefs&&prefs.lang) setAppLang(prefs.lang); setView("home"); tap(15);}}),
+      view==="welcome" && h(Welcome,{onStart:startApp,onBack:()=>{setView("home"); tap(8);},onSheet:setSheet,appLang}),
+      view==="home" && h(Home,{state:s,onSheet:setSheet,onSearch:()=>{setView("catalog"); tap(10);},cur,setCur,onAbout:openAbout,onPickCar:pickPopular,appLang,onLangOpen:()=>setSheet("lang")}),
+      view==="catalog" && h(Catalog,{state:s,onBack:()=>setView("home"),onSelect:(c)=>{setCar(c); setView("detail"); tap(8);},onEdit:()=>setView("home"),cur,setCur,appLang,onLangOpen:()=>setSheet("lang")}),
+      view==="detail" && car && h(CarDetail,{car,state:s,onBack:()=>setView("catalog"),onConfirm:()=>{setView("insurance"); tap(10);},cur,setCur,appLang,onLangOpen:()=>setSheet("lang"),onTierTap:(tier)=>{
+        // Подгоняем return = pickup + tier.minDays. Открываем DateSheet чтобы юзер увидел/докрутил.
+        if (!s.pickupDate) { setSheet("date"); return; }
+        const newReturn = addDays(s.pickupDate, tier.minDays);
+        setS({...s, returnDate: newReturn});
+        setSheet("date");
+        tap(15);
+      }}),
+      view==="insurance" && car && h(InsuranceStep,{state:s,ins,setIns,onBack:()=>setView("detail"),onNext:()=>{setView("extras"); tap(10);},cur,setCur,days:d,appLang,onLangOpen:()=>setSheet("lang")}),
+      view==="extras" && car && h(ExtrasStep,{state:s,extras,setExtras,onBack:()=>setView("insurance"),onNext:()=>{setView("summary"); tap(10);},cur,setCur,days:d,appLang,onLangOpen:()=>setSheet("lang")}),
+      view==="summary" && car && h(BookingSummary,{car,state:s,ins,extras,docs,setDocs,contact,setContact,terms,setTerms,onBack:()=>setView("extras"),onSubmit:submit,cur,setCur,jumpStep,days:d,onSheet:setSheet,appLang,onLangOpen:()=>setSheet("lang")}),
       view==="success" && car && h(Success,{car,total,days:d,state:s,contact,cur,onDone:done}),
 
       h(DateSheet,{open:sheet==="date",onClose:()=>{setSheet(null); setAfterDateGo(null);},value:{start:s.pickupDate,end:s.returnDate},onConfirm:(v)=>{
-        setS({...s,pickupDate:v.start,returnDate:v.end});
+        // Если pickup на сегодня — авто-сдвиг времени на минимально допустимое (буфер 2ч)
+        const earlyP = earliestTimeFor(v.start);
+        const newPickupTime = (earlyP && s.pickupTime < earlyP) ? earlyP : s.pickupTime;
+        const earlyR = earliestTimeFor(v.end);
+        const newReturnTime = (earlyR && s.returnTime < earlyR) ? earlyR : s.returnTime;
+        setS({...s,pickupDate:v.start,returnDate:v.end,pickupTime:newPickupTime,returnTime:newReturnTime});
         setSheet(null);
         if (afterDateGo) { setView(afterDateGo); setAfterDateGo(null); tap(10); }
       }}),
-      h(LocSheet,{open:sheet==="loc-pickup",onClose:()=>setSheet(null),valueLoc:s.pickupLoc,valueTime:s.pickupTime,onConfirm:(v)=>{setS({...s,pickupLoc:v.loc,pickupTime:v.time});setSheet(null);},title:"Где забрать?",timeLabel:"Время получения",cur,context:"pickup"}),
-      h(LocSheet,{open:sheet==="loc-return",onClose:()=>setSheet(null),valueLoc:s.returnLoc,valueTime:s.returnTime,onConfirm:(v)=>{setS({...s,returnLoc:v.loc,returnTime:v.time});setSheet(null);},title:"Куда вернуть?",timeLabel:"Время возврата",cur,context:"return"}),
+      h(LocSheet,{open:sheet==="loc-pickup",onClose:()=>setSheet(null),valueLoc:s.pickupLoc,valueTime:s.pickupTime,forDate:s.pickupDate,onConfirm:(v)=>{setS({...s,pickupLoc:v.loc,pickupTime:v.time});setSheet(null);},title:"Где забрать?",timeLabel:"Время получения",cur,context:"pickup"}),
+      h(LocSheet,{open:sheet==="loc-return",onClose:()=>setSheet(null),valueLoc:s.returnLoc,valueTime:s.returnTime,forDate:s.returnDate,onConfirm:(v)=>{setS({...s,returnLoc:v.loc,returnTime:v.time});setSheet(null);},title:"Куда вернуть?",timeLabel:"Время возврата",cur,context:"return"}),
       h(SupportSheet,{open:sheet==="support",onClose:()=>setSheet(null)}),
+      h(LangSheet,{open:sheet==="lang",onClose:()=>setSheet(null),lang:appLang,setLang:setAppLang}),
       h(InfoSheet,{open:sheet==="info-privacy",onClose:()=>setSheet(null),title:"Обработка персональных данных",
         body:"Мы собираем e-mail, телефон, имя и фото документов исключительно для оформления договора аренды и связи с вами. Данные хранятся в защищённой базе на серверах в ЕС, не передаются третьим лицам кроме платёжного шлюза (Stripe) при проведении оплаты. Вы можете запросить удаление данных в любой момент: hello@rentcar.rs. Полная политика конфиденциальности — на сайте."}),
       h(InfoSheet,{open:sheet==="info-terms",onClose:()=>setSheet(null),title:"Условия аренды",
